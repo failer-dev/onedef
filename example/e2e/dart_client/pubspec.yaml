@@ -1,0 +1,6 @@
+name: e2e_dart_client
+environment:
+  sdk: ^3.0.0
+dependencies:
+  user_api:
+    path: packages/user_api
