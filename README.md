@@ -1,6 +1,6 @@
 # onedef
 
-**One definition. HTTP server, Dart SDK and TypeScript SDK — all at once.**
+**One definition. HTTP runtime, programmatic IR, and language SDK generators.**
 
 [![Go 1.25+](https://img.shields.io/badge/go-1.25+-blue)](https://go.dev/dl/)
 
@@ -13,21 +13,115 @@ type GetUserAPI struct {
     onedef.GET `path:"/users/{id}"`
     Request    struct{ ID string }
     Response   User
+    Deps       struct {
+        Users UserRepo
+    }
 }
 
 func (h *GetUserAPI) Handle(ctx context.Context) error {
-    h.Response = db.FindUser(h.Request.ID)
+    user, err := h.Deps.Users.FindUser(ctx, h.Request.ID)
+    if err != nil {
+        return err
+    }
+    h.Response = user
     return nil
 }
+
+repo := &PostgresUserRepo{}
+api := onedef.Group(
+    "/",
+    onedef.Dependency[UserRepo](repo),
+    onedef.Endpoint(&GetUserAPI{}),
+)
+app := onedef.New(api)
 ```
 
 This single struct gives you:
 
 - `GET /users/{id}` — registered, path param parsed, response serialized
-- Dart SDK — `curl localhost:8080/onedef/sdk/dart`
-- TypeScript SDK — `curl localhost:8080/onedef/sdk/ts` (TODO)
+- Predictable HTTP contract — optional `status:"201"`, success envelopes, and structured JSON errors
+- Startup-validated DI — scoped `onedef.Dependency(...)` nodes for optional `Deps` structs
+- Programmatic IR JSON — parse the same endpoint definitions into a language-neutral spec from Go
+- Programmatic SDK generation — Dart today, other languages later
 
 Change the struct. Everything updates. Synchronization cannot break — structurally.
+
+## Definition + SDK Generation
+
+Keep your endpoint definitions in an importable package. Runtime dependencies live in the same definition tree, but they are ignored by IR/SDK generation:
+
+```go
+package api
+
+type RuntimeDeps struct {
+    Users  UserRepo
+    Logger *slog.Logger
+}
+
+func Definition(deps RuntimeDeps) *onedef.Spec {
+    return onedef.Group(
+        "/",
+        onedef.Dependency[UserRepo](deps.Users),
+        onedef.Dependency(deps.Logger),
+        onedef.Endpoints(&GetUser{}, &CreateUser{}),
+    )
+}
+```
+
+Then your `main` stays thin:
+
+```go
+app := onedef.New(api.Definition(api.RuntimeDeps{
+    Users: repo,
+    Logger: logger,
+}))
+```
+
+For IR or SDK generation, call the same `Definition(deps)` with dummy or in-memory dependencies:
+
+```go
+specJSON, err := api.Definition(dummyDeps).GenerateIRJSON(onedef.GenerateIROptions{})
+if err != nil {
+    panic(err)
+}
+_ = specJSON
+```
+
+Then generate SDK packages from the same definition:
+
+```go
+if err := api.Definition(dummyDeps).GenerateSDK(onedef.GenerateSDKOptions{
+    OutDir:      "packages/api",
+    PackageName: "api",
+}); err != nil {
+    panic(err)
+}
+```
+
+`generators/dart` is now a small melos workspace with `packages/onedef_gen` and `packages/onedef_core`.
+Generated Dart SDKs depend on the shared `onedef_core` package in `generators/dart/packages/onedef_core`.
+
+## Server hardening defaults
+
+`app.Run(...)` now applies secure `net/http.Server` defaults automatically:
+
+- `ReadHeaderTimeout: 5s`
+- `ReadTimeout: 15s`
+- `WriteTimeout: 30s`
+- `IdleTimeout: 60s`
+- `MaxHeaderBytes: 1 << 20`
+
+You can still override them per server:
+
+```go
+if err := app.Run(
+    ":8080",
+    onedef.WithReadTimeout(20*time.Second),
+    onedef.WithIdleTimeout(90*time.Second),
+); err != nil {
+    panic(err)
+}
+```
 
 ## Why onedef?
 TL;DR: The paradigm shift in the LLM era isn't using LLM as a tool — it's making your project a tool for LLM.
