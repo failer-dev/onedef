@@ -1,0 +1,4 @@
+name: onedef_dart_workspace
+
+packages:
+  - packages/*

@@ -37,6 +37,14 @@ func WireName(sf reflect.StructField) string {
 	return ToCamelCase(sf.Name)
 }
 
+func HeaderName(sf reflect.StructField) (string, bool) {
+	tag, ok := sf.Tag.Lookup("header")
+	if !ok {
+		return "", false
+	}
+	return tag, true
+}
+
 func ToCamelCase(s string) string {
 	if len(s) == 0 {
 		return s

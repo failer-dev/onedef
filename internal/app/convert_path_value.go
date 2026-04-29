@@ -12,6 +12,16 @@ var uuidType = reflect.TypeOf(uuid.UUID{})
 
 // convertPathValue는 path parameter 문자열을 대상 필드의 reflect.Type에 맞게 변환한다.
 func convertPathValue(raw string, target reflect.Type) (reflect.Value, error) {
+	if target.Kind() == reflect.Pointer {
+		inner, err := convertPathValue(raw, target.Elem())
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		ptr := reflect.New(target.Elem())
+		ptr.Elem().Set(inner)
+		return ptr, nil
+	}
+
 	// uuid.UUID는 Kind가 [16]byte라서 별도 처리
 	if target == uuidType {
 		v, err := uuid.Parse(raw)

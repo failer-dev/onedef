@@ -8,8 +8,8 @@ import (
 	"github.com/failer-dev/onedef/internal/meta"
 )
 
-func MakeHandlerFunc(es meta.EndpointStruct) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func MakeHandlerFunc(es meta.EndpointStruct, deps []resolvedDependency) meta.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		endpointInstance := reflect.New(es.StructType)
 
 		// Request 설정
@@ -17,9 +17,12 @@ func MakeHandlerFunc(es meta.EndpointStruct) http.HandlerFunc {
 
 		// 1. Body 파싱 (POST/PUT/PATCH)
 		if r.Body != nil && es.Method != meta.EndpointMethodGet && es.Method != meta.EndpointMethodDelete {
-			if err := json.NewDecoder(r.Body).Decode(requestInstance.Addr().Interface()); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
+			if err := decodeJSON(r, requestInstance.Addr().Interface()); err != nil {
+				return meta.BadRequest(
+					"invalid_body",
+					"request body is invalid JSON",
+					map[string]any{"error": err.Error()},
+				)
 			}
 		}
 
@@ -28,8 +31,11 @@ func MakeHandlerFunc(es meta.EndpointStruct) http.HandlerFunc {
 			raw := r.PathValue(p.VariableName)
 			val, err := convertPathValue(raw, p.FieldType)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
+				return meta.BadRequest(
+					"invalid_path_parameter",
+					err.Error(),
+					map[string]any{"parameter": p.VariableName},
+				)
 			}
 			requestInstance.Field(p.FieldIndex).Set(val)
 		}
@@ -42,18 +48,60 @@ func MakeHandlerFunc(es meta.EndpointStruct) http.HandlerFunc {
 			}
 			val, err := convertPathValue(raw, q.FieldType)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
+				return meta.BadRequest(
+					"invalid_query_parameter",
+					err.Error(),
+					map[string]any{"parameter": q.QueryKey},
+				)
 			}
 			requestInstance.Field(q.FieldIndex).Set(val)
 		}
 
+		// 4. Header params 세팅
+		for _, h := range es.Request.HeaderParameterFields {
+			raw := r.Header.Get(h.HeaderName)
+			if raw == "" {
+				if !h.Required {
+					continue
+				}
+				return meta.BadRequest(
+					"missing_header_parameter",
+					"required request header is missing",
+					map[string]any{"parameter": h.HeaderName},
+				)
+			}
+			val, err := convertPathValue(raw, h.FieldType)
+			if err != nil {
+				return meta.BadRequest(
+					"invalid_header_parameter",
+					err.Error(),
+					map[string]any{"parameter": h.HeaderName},
+				)
+			}
+			requestInstance.Field(h.FieldIndex).Set(val)
+		}
+
+		if es.Dependencies.Exists {
+			depsField := endpointInstance.Elem().Field(es.Dependencies.StructIndex)
+			for _, dep := range deps {
+				depsField.Field(dep.FieldIndex).Set(dep.Value)
+			}
+		}
+
 		handler := endpointInstance.Interface().(meta.Handler)
 		if err := handler.Handle(r.Context()); err != nil {
-			// handle error
+			return err
 		}
 
 		response := endpointInstance.Elem().FieldByName("Response").Interface()
-		json.NewEncoder(w).Encode(response)
+		writeHTTPSuccess(w, es.SuccessStatus, response)
+		return nil
 	}
+}
+
+func decodeJSON(r *http.Request, target any) error {
+	if err := json.NewDecoder(r.Body).Decode(target); err != nil {
+		return err
+	}
+	return nil
 }

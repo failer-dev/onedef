@@ -3,11 +3,22 @@ package meta
 import "reflect"
 
 type EndpointStruct struct {
-	StructName        string
-	Method            EndpointMethod
-	Path              string
-	Request           RequestField
-	StructType reflect.Type
+	StructName               string
+	StructPkgPath            string
+	StructQualifiedName      string
+	SDKName                  string
+	Method                   EndpointMethod
+	Path                     string
+	LeafPath                 string
+	GroupPath                []string
+	InheritedRequiredHeaders []string
+	EndpointRequiredHeaders  []string
+	FinalRequiredHeaders     []string
+	SuccessStatus            int
+	Request                  RequestField
+	Dependencies             DependenciesField
+	StructType               reflect.Type
+	ErrorBodyType            reflect.Type
 }
 
 type PathParameterField struct {
@@ -24,8 +35,17 @@ type QueryParameterField struct {
 	QueryKey   string // ex: page, query
 }
 
+type HeaderParameterField struct {
+	FieldName  string
+	FieldIndex int
+	FieldType  reflect.Type
+	HeaderName string
+	Required   bool
+}
+
 type RequestField struct {
-	PathParameterFields  []PathParameterField
-	QueryParameterFields []QueryParameterField
-	FieldType            reflect.Type
+	PathParameterFields   []PathParameterField
+	QueryParameterFields  []QueryParameterField
+	HeaderParameterFields []HeaderParameterField
+	FieldType             reflect.Type
 }

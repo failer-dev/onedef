@@ -1,7 +1,9 @@
 package inspect
 
 import (
+	"net/http"
 	"reflect"
+	"strconv"
 
 	"github.com/failer-dev/onedef/internal/meta"
 	"github.com/failer-dev/wherr"
@@ -9,7 +11,7 @@ import (
 
 var markerReflectType = reflect.TypeOf((*meta.EndpointMethodMarker)(nil)).Elem()
 
-func InspectEndpointMethodMarker(structType reflect.Type) (meta.EndpointMethod, string, map[string]string, error) {
+func InspectEndpointMethodMarker(structType reflect.Type) (meta.EndpointMethod, string, map[string]string, int, error) {
 	var markerField reflect.StructField
 	found := false
 
@@ -22,15 +24,19 @@ func InspectEndpointMethodMarker(structType reflect.Type) (meta.EndpointMethod, 
 	}
 
 	if !found {
-		return "", "", nil, wherr.Errorf("struct %q must embed an EndpointMethodMarker (onedef.GET, onedef.POST, etc.)", structType.Name())
+		return "", "", nil, 0, wherr.Errorf("struct %q must embed an EndpointMethodMarker (onedef.GET, onedef.POST, etc.)", structType.Name())
 	}
 
 	path, ok := markerField.Tag.Lookup("path")
 	if !ok {
-		return "", "", nil, wherr.Errorf("endpointMethodMarker field %q in %q must have a `path` tag", markerField.Name, structType.Name())
+		return "", "", nil, 0, wherr.Errorf("endpointMethodMarker field %q in %q must have a `path` tag", markerField.Name, structType.Name())
 	}
 
 	pathParams := extractPathParams(path)
+	successStatus, err := inspectSuccessStatus(markerField, structType.Name())
+	if err != nil {
+		return "", "", nil, 0, err
+	}
 
 	var method meta.EndpointMethod
 	marker := reflect.New(markerField.Type).Elem().Interface()
@@ -50,10 +56,10 @@ func InspectEndpointMethodMarker(structType reflect.Type) (meta.EndpointMethod, 
 	case meta.OPTIONS:
 		method = meta.EndpointMethodOptions
 	default:
-		return "", "", nil, wherr.Errorf("struct %q has unknown EndpointMethodMarker type %q", structType.Name(), markerField.Type.Name())
+		return "", "", nil, 0, wherr.Errorf("struct %q has unknown EndpointMethodMarker type %q", structType.Name(), markerField.Type.Name())
 	}
 
-	return method, path, pathParams, nil
+	return method, path, pathParams, successStatus, nil
 }
 
 func InspectRequest(
@@ -73,6 +79,22 @@ func InspectRequest(
 
 	for i := 0; i < requestType.NumField(); i++ {
 		field := requestType.Field(i)
+		if headerName, hasHeader := HeaderName(field); hasHeader {
+			if !field.IsExported() {
+				return meta.RequestField{}, wherr.Errorf("onedef: %s.Request.%s with header tag must be exported", structType.Name(), field.Name)
+			}
+			if headerName == "" {
+				return meta.RequestField{}, wherr.Errorf("onedef: %s.Request.%s header tag must not be empty", structType.Name(), field.Name)
+			}
+			result.HeaderParameterFields = append(result.HeaderParameterFields, meta.HeaderParameterField{
+				FieldName:  field.Name,
+				FieldIndex: i,
+				FieldType:  field.Type,
+				HeaderName: headerName,
+				Required:   field.Type.Kind() != reflect.Pointer,
+			})
+			continue
+		}
 		if !field.IsExported() {
 			continue
 		}
@@ -96,4 +118,65 @@ func InspectRequest(
 	}
 
 	return result, nil
+}
+
+func InspectDependencies(structType reflect.Type) (meta.DependenciesField, error) {
+	depsField, ok := structType.FieldByName("Deps")
+	if !ok {
+		return meta.DependenciesField{}, nil
+	}
+	if depsField.Anonymous || depsField.Type.Kind() != reflect.Struct {
+		return meta.DependenciesField{}, wherr.Errorf("onedef: %s.Deps must be a struct field", structType.Name())
+	}
+
+	result := meta.DependenciesField{
+		Exists:      true,
+		StructIndex: depsField.Index[0],
+	}
+
+	for i := 0; i < depsField.Type.NumField(); i++ {
+		field := depsField.Type.Field(i)
+		if field.Anonymous {
+			return meta.DependenciesField{}, wherr.Errorf("onedef: %s.Deps must not contain anonymous fields", structType.Name())
+		}
+		if !field.IsExported() {
+			return meta.DependenciesField{}, wherr.Errorf("onedef: %s.Deps.%s must be exported", structType.Name(), field.Name)
+		}
+
+		result.Fields = append(result.Fields, meta.DependencyField{
+			FieldName:  field.Name,
+			FieldIndex: i,
+			FieldType:  field.Type,
+		})
+	}
+
+	return result, nil
+}
+
+func inspectSuccessStatus(markerField reflect.StructField, structName string) (int, error) {
+	raw, ok := markerField.Tag.Lookup("status")
+	if !ok || raw == "" {
+		return http.StatusOK, nil
+	}
+
+	status, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, wherr.Errorf(
+			"endpointMethodMarker field %q in %q has invalid `status` tag %q: %w",
+			markerField.Name,
+			structName,
+			raw,
+			err,
+		)
+	}
+	if status < 200 || status > 299 {
+		return 0, wherr.Errorf(
+			"endpointMethodMarker field %q in %q has invalid `status` tag %q: status must be between 200 and 299",
+			markerField.Name,
+			structName,
+			raw,
+		)
+	}
+
+	return status, nil
 }
