@@ -48,11 +48,13 @@ I built onedef because I got tired of that. I've worked as a client developer, a
 
 ## Client SDK
 
-Currently targeting Dart, with TypeScript, Swift, Kotlin, and more on the roadmap.
+Currently targeting Dart.
+
+TypeScript, Swift, Kotlin, and more on the roadmap.
 
 The SDK generation is powered by a custom IR (Intermediate Representation) designed
 from scratch — not derived from OpenAPI, not a wrapper around existing tooling.
-It was built with one goal: make client developers happy.
+It was built with one goal: **make client developers happy.**
 
 Because the IR is language-agnostic, any language is theoretically supported
 as long as it has a parser. With a Dart reference implementation already in place,
