@@ -1,0 +1,83 @@
+{
+  "version": "v1",
+  "schema": "../schema/v1.schema.json",
+  "cases": [
+    {
+      "id": "valid/simple",
+      "file": "../fixtures/valid/simple.json",
+      "valid": true,
+      "checks": [
+        "schema",
+        "semantic",
+        "default_error_builtin",
+        "path_params_match"
+      ]
+    },
+    {
+      "id": "valid/grouped",
+      "file": "../fixtures/valid/grouped.json",
+      "valid": true,
+      "checks": [
+        "schema",
+        "semantic",
+        "group_tree",
+        "required_headers"
+      ]
+    },
+    {
+      "id": "valid/nested-groups",
+      "file": "../fixtures/valid/nested-groups.json",
+      "valid": true,
+      "checks": [
+        "schema",
+        "semantic",
+        "nested_group_tree"
+      ]
+    },
+    {
+      "id": "valid/custom-error",
+      "file": "../fixtures/valid/custom-error.json",
+      "valid": true,
+      "checks": [
+        "schema",
+        "semantic",
+        "custom_error_type"
+      ]
+    },
+    {
+      "id": "invalid/duplicate-type",
+      "file": "../fixtures/invalid/duplicate-type.json",
+      "valid": false,
+      "checks": ["semantic"],
+      "expectedError": "duplicate_type"
+    },
+    {
+      "id": "invalid/duplicate-header",
+      "file": "../fixtures/invalid/duplicate-header.json",
+      "valid": false,
+      "checks": ["semantic"],
+      "expectedError": "duplicate_header"
+    },
+    {
+      "id": "invalid/unknown-type-ref",
+      "file": "../fixtures/invalid/unknown-type-ref.json",
+      "valid": false,
+      "checks": ["semantic"],
+      "expectedError": "unknown_type_ref"
+    },
+    {
+      "id": "invalid/bad-path-param",
+      "file": "../fixtures/invalid/bad-path-param.json",
+      "valid": false,
+      "checks": ["semantic"],
+      "expectedError": "path_param_mismatch"
+    },
+    {
+      "id": "invalid/bad-204-response-body",
+      "file": "../fixtures/invalid/bad-204-response-body.json",
+      "valid": false,
+      "checks": ["semantic"],
+      "expectedError": "invalid_success_response"
+    }
+  ]
+}

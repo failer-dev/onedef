@@ -1,0 +1,131 @@
+{
+  "version": "v1",
+  "naming": {
+    "initialisms": ["ID"]
+  },
+  "groups": [
+    {
+      "id": "branch",
+      "name": "branch",
+      "pathSegments": ["branch"],
+      "requiredHeaders": ["Authorization", "X-Branch-Id"],
+      "providerHeaders": [
+        {
+          "name": "Authorization",
+          "wireName": "Authorization",
+          "type": { "kind": "string" },
+          "required": true,
+          "description": "Bearer access token.",
+          "examples": ["Bearer demo-token"]
+        },
+        {
+          "name": "BranchID",
+          "wireName": "X-Branch-Id",
+          "type": { "kind": "int" },
+          "required": true,
+          "description": "Branch identifier.",
+          "examples": ["123"]
+        }
+      ],
+      "groups": [
+        {
+          "id": "branch.booking",
+          "name": "booking",
+          "pathSegments": ["branch", "booking"],
+          "requiredHeaders": ["X-Booking-Scope"],
+          "providerHeaders": [
+            {
+              "name": "BookingScope",
+              "wireName": "X-Booking-Scope",
+              "type": { "kind": "string" },
+              "required": true
+            }
+          ],
+          "endpoints": [
+            {
+              "name": "CreateBooking",
+              "sdkName": "create",
+              "method": "POST",
+              "path": "/api/v1/branch/booking",
+              "successStatus": 201,
+              "requiredHeaders": [
+                "Authorization",
+                "X-Branch-Id",
+                "X-Booking-Scope",
+                "Idempotency-Key"
+              ],
+              "request": {
+                "headerParams": [
+                  {
+                    "name": "IdempotencyKey",
+                    "wireName": "Idempotency-Key",
+                    "type": { "kind": "int" },
+                    "required": true
+                  }
+                ],
+                "body": { "kind": "named", "name": "CreateBookingRequest" }
+              },
+              "response": {
+                "envelope": true,
+                "body": { "kind": "named", "name": "Booking" }
+              },
+              "error": {
+                "body": { "kind": "named", "name": "DefaultError" }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "types": [
+    {
+      "name": "CreateBookingRequest",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "CustomerID",
+          "wireName": "customerId",
+          "type": { "kind": "uuid" },
+          "required": true
+        },
+        {
+          "name": "Memo",
+          "wireName": "memo",
+          "type": { "kind": "string", "nullable": true },
+          "required": false,
+          "nullable": true,
+          "omitEmpty": true
+        }
+      ]
+    },
+    {
+      "name": "Booking",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "ID",
+          "wireName": "id",
+          "type": { "kind": "uuid" },
+          "required": true
+        },
+        {
+          "name": "CustomerID",
+          "wireName": "customerId",
+          "type": { "kind": "uuid" },
+          "required": true
+        },
+        {
+          "name": "Tags",
+          "wireName": "tags",
+          "type": {
+            "kind": "list",
+            "elem": { "kind": "string" }
+          },
+          "required": false,
+          "omitEmpty": true
+        }
+      ]
+    }
+  ]
+}

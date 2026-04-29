@@ -1,0 +1,10 @@
+name: onedef_dart_sdk_gen
+description: Generates Dart SDK packages from onedef IR JSON.
+environment:
+  sdk: ^3.0.0
+
+dependencies:
+  path: ^1.9.1
+
+dev_dependencies:
+  test: ^1.26.3

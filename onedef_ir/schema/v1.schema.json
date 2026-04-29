@@ -1,0 +1,343 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://onedef.dev/ir/schema/v1.schema.json",
+  "title": "onedef IR v1",
+  "type": "object",
+  "required": ["version", "types"],
+  "properties": {
+    "version": {
+      "const": "v1"
+    },
+    "naming": {
+      "$ref": "#/$defs/naming"
+    },
+    "groups": {
+      "$ref": "#/$defs/groupArray"
+    },
+    "endpoints": {
+      "$ref": "#/$defs/endpointArray"
+    },
+    "types": {
+      "$ref": "#/$defs/typeDefArray"
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "naming": {
+      "type": ["object", "null"],
+      "properties": {
+        "initialisms": {
+          "$ref": "#/$defs/stringArray"
+        }
+      },
+      "additionalProperties": true
+    },
+    "groupArray": {
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/$defs/group"
+      }
+    },
+    "group": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pathSegments": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "requiredHeaders": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "providerHeaders": {
+          "$ref": "#/$defs/parameterArray"
+        },
+        "endpoints": {
+          "$ref": "#/$defs/endpointArray"
+        },
+        "groups": {
+          "$ref": "#/$defs/groupArray"
+        }
+      },
+      "additionalProperties": true
+    },
+    "endpointArray": {
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/$defs/endpoint"
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "required": [
+        "name",
+        "method",
+        "path",
+        "successStatus",
+        "request",
+        "response"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sdkName": {
+          "type": "string"
+        },
+        "method": {
+          "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "successStatus": {
+          "type": "integer",
+          "minimum": 200,
+          "maximum": 299
+        },
+        "group": {
+          "type": "string"
+        },
+        "requiredHeaders": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "request": {
+          "$ref": "#/$defs/request"
+        },
+        "response": {
+          "$ref": "#/$defs/response"
+        },
+        "error": {
+          "$ref": "#/$defs/error"
+        }
+      },
+      "additionalProperties": true
+    },
+    "request": {
+      "type": "object",
+      "properties": {
+        "pathParams": {
+          "$ref": "#/$defs/parameterArray"
+        },
+        "queryParams": {
+          "$ref": "#/$defs/parameterArray"
+        },
+        "headerParams": {
+          "$ref": "#/$defs/parameterArray"
+        },
+        "body": {
+          "$ref": "#/$defs/typeRef"
+        }
+      },
+      "additionalProperties": true
+    },
+    "parameterArray": {
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/$defs/parameter"
+      }
+    },
+    "parameter": {
+      "type": "object",
+      "required": ["name", "wireName", "type", "required"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "wireName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/typeRef"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        },
+        "examples": {
+          "$ref": "#/$defs/stringArray"
+        }
+      },
+      "additionalProperties": true
+    },
+    "response": {
+      "type": "object",
+      "required": ["envelope"],
+      "properties": {
+        "envelope": {
+          "type": "boolean"
+        },
+        "body": {
+          "$ref": "#/$defs/typeRef"
+        }
+      },
+      "additionalProperties": true
+    },
+    "error": {
+      "type": "object",
+      "required": ["body"],
+      "properties": {
+        "body": {
+          "$ref": "#/$defs/typeRef"
+        }
+      },
+      "additionalProperties": true
+    },
+    "typeDefArray": {
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/$defs/typeDef"
+      }
+    },
+    "typeDef": {
+      "type": "object",
+      "required": ["name", "kind"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "object"
+        },
+        "fields": {
+          "$ref": "#/$defs/fieldDefArray"
+        }
+      },
+      "additionalProperties": true
+    },
+    "fieldDefArray": {
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/$defs/fieldDef"
+      }
+    },
+    "fieldDef": {
+      "type": "object",
+      "required": ["name", "wireName", "type", "required"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "wireName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/typeRef"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "omitEmpty": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "typeRef": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "any",
+            "bool",
+            "float",
+            "int",
+            "list",
+            "map",
+            "named",
+            "string",
+            "uuid"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "elem": {
+          "$ref": "#/$defs/typeRef"
+        },
+        "key": {
+          "$ref": "#/$defs/typeRef"
+        },
+        "value": {
+          "$ref": "#/$defs/typeRef"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "named"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "required": ["name"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "list"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "required": ["elem"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "map"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "required": ["value"]
+          }
+        }
+      ],
+      "additionalProperties": true
+    },
+    "stringArray": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

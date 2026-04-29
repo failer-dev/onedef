@@ -1,129 +1,59 @@
 # onedef
 
-**One definition. HTTP runtime, programmatic IR, and language SDK generators.**
+**One def**inition, REST API server and client SDKs — always in sync.
 
-[![Go 1.25+](https://img.shields.io/badge/go-1.25+-blue)](https://go.dev/dl/)
+I got tired of manually syncing APIs with Frontend, so I built a framework that generates the SDKs automatically.
+
+> ⚠️ **v0.2.0** — Not production-ready. Expect breaking changes.
 
 ## The Solution
 
-In onedef, the struct *is* the API contract and spec.
+In onedef, the struct *is* the API contract.
 
 ```go
 type GetUserAPI struct {
     onedef.GET `path:"/users/{id}"`
     Request    struct{ ID string }
     Response   User
-    Deps       struct {
-        Users UserRepo
-    }
 }
 
 func (h *GetUserAPI) Handle(ctx context.Context) error {
-    user, err := h.Deps.Users.FindUser(ctx, h.Request.ID)
-    if err != nil {
-        return err
-    }
-    h.Response = user
+    h.Response = db.FindUser(h.Request.ID)
     return nil
 }
-
-repo := &PostgresUserRepo{}
-api := onedef.Group(
-    "/",
-    onedef.Dependency[UserRepo](repo),
-    onedef.Endpoint(&GetUserAPI{}),
-)
-app := onedef.New(api)
 ```
 
 This single struct gives you:
 
-- `GET /users/{id}` — registered, path param parsed, response serialized
-- Predictable HTTP contract — optional `status:"201"`, success envelopes, and structured JSON errors
-- Startup-validated DI — scoped `onedef.Dependency(...)` nodes for optional `Deps` structs
-- Programmatic IR JSON — parse the same endpoint definitions into a language-neutral spec from Go
-- Programmatic SDK generation — Dart today, other languages later
+- **`GET /users/{id}`** — registered, path param parsed, response serialized
+- **Client SDK** — type-safe, generated from the same definition, no drift possible
 
 Change the struct. Everything updates. Synchronization cannot break — structurally.
 
-## Definition + SDK Generation
+## The Problem
 
-Keep your endpoint definitions in an importable package. Runtime dependencies live in the same definition tree, but they are ignored by IR/SDK generation:
+OpenAPI solved the documentation problem. But it didn't solve the product problem.
 
-```go
-package api
+You can describe an API with OpenAPI. What you can't guarantee is that the generated SDK feels like something a developer would actually want to use.
 
-type RuntimeDeps struct {
-    Users  UserRepo
-    Logger *slog.Logger
-}
+Here's what usually happens: the backend team generates a massive spec and puts Swagger UI or Redoc in front of it. The API is technically documented. But client developers are still left piecing together how the API actually works — reading through endpoints, schemas, nullable fields, error shapes, and weird naming from the generator.
 
-func Definition(deps RuntimeDeps) *onedef.Spec {
-    return onedef.Group(
-        "/",
-        onedef.Dependency[UserRepo](deps.Users),
-        onedef.Dependency(deps.Logger),
-        onedef.Endpoints(&GetUser{}, &CreateUser{}),
-    )
-}
-```
+When that's not enough, they go read the backend code directly.
 
-Then your `main` stays thin:
+Then they start fighting the schema. Tuning the generator. Patching the generated client. Writing glue code around all of it.
 
-```go
-app := onedef.New(api.Definition(api.RuntimeDeps{
-    Users: repo,
-    Logger: logger,
-}))
-```
+Somehow, this became the de facto standard.
 
-For IR or SDK generation, call the same `Definition(deps)` with dummy or in-memory dependencies:
+I built onedef because I got tired of that. I've worked as a client developer, a backend developer, a CTO, and a tech lead — and every time, the handoff was the same problem.
 
-```go
-specJSON, err := api.Definition(dummyDeps).GenerateIRJSON(onedef.GenerateIROptions{})
-if err != nil {
-    panic(err)
-}
-_ = specJSON
-```
+## Client SDK
 
-Then generate SDK packages from the same definition:
+Currently targeting Dart, with TypeScript, Swift, Kotlin, and more on the roadmap.
 
-```go
-if err := api.Definition(dummyDeps).GenerateSDK(onedef.GenerateSDKOptions{
-    OutDir:      "packages/api",
-    PackageName: "api",
-}); err != nil {
-    panic(err)
-}
-```
+The SDK generation is powered by a custom IR (Intermediate Representation) designed
+from scratch — not derived from OpenAPI, not a wrapper around existing tooling.
+It was built with one goal: make client developers happy.
 
-`generators/dart` is now a small melos workspace with `packages/onedef_gen` and `packages/onedef_core`.
-Generated Dart SDKs depend on the shared `onedef_core` package in `generators/dart/packages/onedef_core`.
-
-## Server hardening defaults
-
-`app.Run(...)` now applies secure `net/http.Server` defaults automatically:
-
-- `ReadHeaderTimeout: 5s`
-- `ReadTimeout: 15s`
-- `WriteTimeout: 30s`
-- `IdleTimeout: 60s`
-- `MaxHeaderBytes: 1 << 20`
-
-You can still override them per server:
-
-```go
-if err := app.Run(
-    ":8080",
-    onedef.WithReadTimeout(20*time.Second),
-    onedef.WithIdleTimeout(90*time.Second),
-); err != nil {
-    panic(err)
-}
-```
-
-## Why onedef?
-TL;DR: The paradigm shift in the LLM era isn't using LLM as a tool — it's making your project a tool for LLM.
-
-Read more in [WHY_ONEDEF.md](./docs/WHY_ONEDEF.md).
+Because the IR is language-agnostic, any language is theoretically supported
+as long as it has a parser. With a Dart reference implementation already in place,
+the LLM era makes adding new targets more tractable than ever.

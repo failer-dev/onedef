@@ -1,0 +1,11 @@
+{
+  "version": "v1",
+  "groups": [
+    {
+      "name": "orders",
+      "requiredHeaders": ["Authorization", "authorization"],
+      "endpoints": []
+    }
+  ],
+  "types": []
+}

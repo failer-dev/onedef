@@ -1,0 +1,105 @@
+{
+  "version": "v1",
+  "naming": {
+    "initialisms": ["ID"]
+  },
+  "groups": [
+    {
+      "id": "user",
+      "name": "user",
+      "pathSegments": ["user"],
+      "requiredHeaders": ["Authorization"],
+      "providerHeaders": [
+        {
+          "name": "Authorization",
+          "wireName": "Authorization",
+          "type": {
+            "kind": "string"
+          },
+          "required": true,
+          "description": "Bearer access token.",
+          "examples": ["Bearer demo-token"]
+        }
+      ],
+      "endpoints": [
+        {
+          "name": "CreateUser",
+          "method": "POST",
+          "path": "/api/v1/users",
+          "successStatus": 201,
+          "request": {
+            "headerParams": [
+              {
+                "name": "IdempotencyKey",
+                "wireName": "Idempotency-Key",
+                "type": {
+                  "kind": "int"
+                },
+                "required": true
+              },
+              {
+                "name": "RequestId",
+                "wireName": "X-Request-Id",
+                "type": {
+                  "kind": "string",
+                  "nullable": true
+                },
+                "required": false
+              }
+            ],
+            "body": {
+              "kind": "named",
+              "name": "CreateUserRequest"
+            }
+          },
+          "response": {
+            "envelope": true,
+            "body": {
+              "kind": "named",
+              "name": "User"
+            }
+          }
+        }
+      ],
+      "groups": []
+    }
+  ],
+  "types": [
+    {
+      "name": "CreateUserRequest",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "Name",
+          "wireName": "name",
+          "type": {
+            "kind": "string"
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "User",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "ID",
+          "wireName": "id",
+          "type": {
+            "kind": "string"
+          },
+          "required": true
+        },
+        {
+          "name": "Name",
+          "wireName": "name",
+          "type": {
+            "kind": "string"
+          },
+          "required": true
+        }
+      ]
+    }
+  ]
+}

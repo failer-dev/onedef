@@ -1,0 +1,32 @@
+{
+  "version": "v1",
+  "endpoints": [
+    {
+      "name": "DeleteUser",
+      "method": "DELETE",
+      "path": "/users/{id}",
+      "successStatus": 204,
+      "request": {
+        "pathParams": [
+          {
+            "name": "ID",
+            "wireName": "id",
+            "type": { "kind": "uuid" },
+            "required": true
+          }
+        ]
+      },
+      "response": {
+        "envelope": true,
+        "body": { "kind": "named", "name": "User" }
+      }
+    }
+  ],
+  "types": [
+    {
+      "name": "User",
+      "kind": "object",
+      "fields": []
+    }
+  ]
+}

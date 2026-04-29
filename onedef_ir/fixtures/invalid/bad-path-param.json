@@ -1,0 +1,39 @@
+{
+  "version": "v1",
+  "endpoints": [
+    {
+      "name": "GetUser",
+      "method": "GET",
+      "path": "/users/{id}",
+      "successStatus": 200,
+      "request": {
+        "pathParams": [
+          {
+            "name": "UserID",
+            "wireName": "userId",
+            "type": { "kind": "uuid" },
+            "required": true
+          }
+        ]
+      },
+      "response": {
+        "envelope": true,
+        "body": { "kind": "named", "name": "User" }
+      }
+    }
+  ],
+  "types": [
+    {
+      "name": "User",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "ID",
+          "wireName": "id",
+          "type": { "kind": "uuid" },
+          "required": true
+        }
+      ]
+    }
+  ]
+}

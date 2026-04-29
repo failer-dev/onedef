@@ -1,0 +1,108 @@
+{
+  "version": "v1",
+  "groups": [
+    {
+      "id": "admin",
+      "name": "admin",
+      "pathSegments": ["admin"],
+      "requiredHeaders": ["Authorization"],
+      "providerHeaders": [
+        {
+          "name": "Authorization",
+          "wireName": "Authorization",
+          "type": { "kind": "string" },
+          "required": true
+        }
+      ],
+      "groups": [
+        {
+          "id": "admin.report",
+          "name": "report",
+          "pathSegments": ["admin", "report"],
+          "groups": [
+            {
+              "id": "admin.report.audit",
+              "name": "audit",
+              "pathSegments": ["admin", "report", "audit"],
+              "requiredHeaders": ["X-Audit-Scope"],
+              "providerHeaders": [
+                {
+                  "name": "AuditScope",
+                  "wireName": "X-Audit-Scope",
+                  "type": { "kind": "string" },
+                  "required": true
+                }
+              ],
+              "endpoints": [
+                {
+                  "name": "ListAuditEvents",
+                  "method": "GET",
+                  "path": "/admin/reports/audit",
+                  "successStatus": 200,
+                  "requiredHeaders": ["Authorization", "X-Audit-Scope"],
+                  "request": {
+                    "queryParams": [
+                      {
+                        "name": "Cursor",
+                        "wireName": "cursor",
+                        "type": { "kind": "string", "nullable": true },
+                        "required": false
+                      }
+                    ]
+                  },
+                  "response": {
+                    "envelope": true,
+                    "body": { "kind": "named", "name": "AuditEventPage" }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "types": [
+    {
+      "name": "AuditEventPage",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "Items",
+          "wireName": "items",
+          "type": {
+            "kind": "list",
+            "elem": { "kind": "named", "name": "AuditEvent" }
+          },
+          "required": true
+        },
+        {
+          "name": "NextCursor",
+          "wireName": "nextCursor",
+          "type": { "kind": "string", "nullable": true },
+          "required": false,
+          "nullable": true,
+          "omitEmpty": true
+        }
+      ]
+    },
+    {
+      "name": "AuditEvent",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "ID",
+          "wireName": "id",
+          "type": { "kind": "uuid" },
+          "required": true
+        },
+        {
+          "name": "Action",
+          "wireName": "action",
+          "type": { "kind": "string" },
+          "required": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "version": "v1",
+  "endpoints": [],
+  "types": [
+    {
+      "name": "User",
+      "kind": "object",
+      "fields": []
+    },
+    {
+      "name": "User",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "ID",
+          "wireName": "id",
+          "type": { "kind": "uuid" },
+          "required": true
+        }
+      ]
+    }
+  ]
+}

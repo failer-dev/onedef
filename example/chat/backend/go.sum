@@ -1,0 +1,4 @@
+github.com/failer-dev/wherr v1.0.0 h1:MVkjtJKpM8qD3fcBRHnrYHv9hgOc50V6x54SsfehfFc=
+github.com/failer-dev/wherr v1.0.0/go.mod h1:GrTn3DU+rFOrgPzEaTlf9nqtqUOQfiVkaxBwZeC4NJc=
+github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
+github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=

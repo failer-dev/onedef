@@ -1,70 +1,42 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
+## [0.2.0] - 2026-04-29
 
 ### Added
 
-- Programmatic `GenerateIRJSON` and `GenerateSDK` APIs for consuming endpoint definitions from Go
-- A public `ir` package for parsing endpoint definitions into JSON-serializable IR
-- A Dart melos workspace under `generators/dart` with `onedef_gen` and `onedef_core`
-- A shared `onedef_core` Dart package for `Transport`, `Success`, `ApiException`, and future shared runtime helpers
-- Scoped `ErrorPolicy[T]` nodes for typed runtime error responses and endpoint-specific overrides
-- Dart SDK `Result<T, E>` return values with typed HTTP, network, and contract-violation variants
+- Added Go group DSL: `Group`, `Endpoint`, `Endpoints`.
+- Added scoped `Provide`, `BeforeHandle`, `AfterHandle`, and `Observe`.
+- Added typed headers through `Header[T]`, `RequireHeader`, and `OmitHeader`.
+- Added scoped `ErrorPolicy[T]` and endpoint-level overrides.
+- Added `GenerateIRJSON` for programmatic IR output.
+- Added `onedef_ir` as the language-neutral contract.
+- Added canonical IR docs, schema, fixtures, and validator tests.
+- Added Dart `sdk_core` and `sdk_gen` packages.
+- Added Dart `Result<T, E>` return model.
+- Added typed Dart failure variants for HTTP errors, network failures, and contract violations.
+- Added declared success status support, including `201` and `204`.
+- Added structured success and error envelopes with `code`, `title`, `message`, and `data`.
+- Added server timeout defaults with override options.
+- Added chat example covering server, IR generation, and Dart SDK generation.
+
+### Breaking Changes
+
+- Replaced raw non-204 success bodies with `{code, title, message, data}` envelopes.
+- Replaced global error handler flow with scoped `ErrorPolicy[T]`.
+- Moved SDK generation out of the Go runtime.
+- Moved Dart SDK generation to external IR consumers.
+- Moved Dart shared runtime types to `onedef_dart/sdk_core`.
+- Replaced generated Dart method return values with `Result<T, E>`.
+- Required generated Dart clients to accept only the declared success status. Any other status is a failure.
+- Required `204` endpoints to use `Response struct{}` and return no body.
 
 ### Removed
 
-- The built-in Go Dart generator under `internal/sdk/dart`
-- The runtime `GET /onedef/sdk/dart` SDK download endpoint
-- `ErrorHandler`/`SetErrorHandler` in favor of group-scoped `ErrorPolicy[T]`
-
-## [0.2.0] - 2026-04-20
-
-### Added
-
-#### HTTP Contract
-
-- Method marker tags can now declare a custom success status — e.g `status:"201"` and `status:"204"`
-- A public `HTTPError` type with convenience constructors: `BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `Unprocessable`, and `Internal`
-- Errors now return a structured JSON envelope with `code`, `title`, `message`, and `data` fields
-- Non-`204` success responses are wrapped in the same `{code, title, message, data}` shape, with `data` carrying the endpoint payload
-- Endpoints that declare `Response struct{}` are strictly enforced as `204 No Content`
-
-#### Dart SDK
-
-- `Success<T>` and `Failure` types are now generated alongside each package
-- `Failure` factories cover three cases: HTTP errors, network failures, and invalid responses
-- Client methods check for the exact declared success status rather than any non-error code
-- `204` endpoints are generated as `Future<Success<void>>`
-- APIs are now grouped — a root `Api` class with subgroups like `UserApi` and `AuthApi`
-- Package layout is now `src/api.dart`, `src/core/base_api.dart`, `src/core/models.dart`, `src/core/result.dart`, and `src/<group>/api.dart`
-
-#### Examples and Tests
-
-- An end-to-end Dart example walking through create, conflict, fetch, and delete user flows
-- Go tests covering success status inspection, HTTP envelope shape, `204` handling, and grouped Dart SDK generation
-
-### Changed
-
-- Non-`204` success responses now return a `{code, title, message, data}` envelope instead of the raw `Response` body
-- Request parse failures produce structured `400` errors with stable codes: `invalid_body`, `invalid_path_parameter`, and `invalid_query_parameter`
-- Handler panics and unexpected errors are masked as `500 internal_error` — raw server errors no longer leak through
-- Dart SDK methods now return `Future<Success<T>>` and throw `Failure` rather than raw model types and `OnedefApiException`
-- The generated package layout moves from a flat single-file client to the grouped `src/api.dart` + `src/core/*` + `src/<group>/api.dart` structure
-- Generated clients now accept only the declared success status, not any non-error response
-
-### Removed
-
-- `OnedefApiException` from generated Dart packages
-- The flat `src/client.dart` entrypoint
-### Removed
-
-- Generated `OnedefApiException` type from Dart SDK packages
-- Flat single-client Dart SDK entrypoint generation via `src/client.dart`
+- Removed in-process Dart SDK generation from the Go runtime.
+- Removed `GET /onedef/sdk/dart`.
+- Removed the built-in Go Dart generator under `internal/sdk/dart`.
+- Removed the old generated `OnedefApiException` flow.
+- Removed flat single-client Dart SDK generation through `src/client.dart`.
 
 ## [0.1.0] - 2026-03-27
 
@@ -72,28 +44,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Core Framework
 
-- Struct-based API endpoint definition system with sealed HTTP method markers (GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS)
-- Route definition via `path:""` struct tags
-- `Handle(context.Context) error` handler interface
-- Type-safe sealed interface preventing external method marker implementations
+- Added struct-based API endpoint definitions with sealed HTTP method markers.
+- Added `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, and `OPTIONS` markers.
+- Added route definitions through `path:""` struct tags.
+- Added `Handle(context.Context) error` handler interface.
+- Added sealed method marker interfaces to block external marker implementations.
 
 #### Request Parsing
 
-- Automatic path parameter extraction with type conversion (string, int8-64, uint8-64, bool, uuid.UUID)
-- Automatic query parameter parsing for GET/DELETE requests
-- JSON body parsing for POST/PUT/PATCH requests
-- Path parameters override body values
+- Added automatic path parameter extraction.
+- Added type conversion for `string`, signed integers, unsigned integers, `bool`, and `uuid.UUID`.
+- Added automatic query parameter parsing for `GET` and `DELETE`.
+- Added JSON body parsing for `POST`, `PUT`, and `PATCH`.
+- Added path parameter precedence over body values.
 
 #### Dart SDK Generation
 
-- Automatic Dart HTTP client generation from Go struct definitions
-- Go to Dart type mapping (integers, floats, strings, booleans, pointers to nullable, slices to List, maps to Map, structs to classes, uuid to String)
-- Dart model class generation with constructors, `fromJson()`, and `toJson()`
-- ZIP package delivery via `GET /onedef/sdk/dart` endpoint
-- Customizable package naming
+- Added Dart HTTP client generation from Go struct definitions.
+- Added Go-to-Dart type mapping.
+- Added Dart model classes with constructors, `fromJson()`, and `toJson()`.
+- Added ZIP package delivery through `GET /onedef/sdk/dart`.
+- Added customizable package naming.
 
 #### Server
 
-- `http.ServeMux`-based routing
-- `Register()` and `Run()` public API
-- Registered route listing on startup
+- Added `http.ServeMux` routing.
+- Added `Register()` and `Run()` public API.
+- Added registered route listing on startup.

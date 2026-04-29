@@ -1,0 +1,51 @@
+{
+  "version": "v1",
+  "naming": {
+    "initialisms": ["ID"]
+  },
+  "endpoints": [
+    {
+      "name": "GetUser",
+      "method": "GET",
+      "path": "/users/{id}",
+      "successStatus": 200,
+      "request": {
+        "pathParams": [
+          {
+            "name": "ID",
+            "wireName": "id",
+            "type": { "kind": "uuid" },
+            "required": true
+          }
+        ]
+      },
+      "response": {
+        "envelope": true,
+        "body": { "kind": "named", "name": "User" }
+      },
+      "error": {
+        "body": { "kind": "named", "name": "DefaultError" }
+      }
+    }
+  ],
+  "types": [
+    {
+      "name": "User",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "ID",
+          "wireName": "id",
+          "type": { "kind": "uuid" },
+          "required": true
+        },
+        {
+          "name": "Name",
+          "wireName": "name",
+          "type": { "kind": "string" },
+          "required": true
+        }
+      ]
+    }
+  ]
+}
