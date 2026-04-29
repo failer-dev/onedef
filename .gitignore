@@ -26,10 +26,15 @@ go.work.sum
 /dist/
 /build/
 /tmp/
+.dart_tool/
 
 # Example binary
 /example/example
 /example/server
+
+# ─── Dart / Flutter ──────────────────────────────────────────────────────────
+example/e2e/dart_client/packages/**/pubspec.lock
+generators/dart/**/pubspec.lock
 
 # ─── Environment & Secrets ───────────────────────────────────────────────────
 .env
@@ -132,3 +137,5 @@ logs/
 .DS_Store
 Thumbs.db
 Desktop.ini
+/fiber/
+/example/
