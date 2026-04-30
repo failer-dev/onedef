@@ -6,8 +6,7 @@ and Client SDK generators.
 The directory intentionally contains no HTTP runtime, SDK rendering, or
 target-language client code. It may contain reference validators for the IR
 contract itself. Each server implementation should emit this IR as JSON. Each SDK
-generator should parse and validate the same JSON before rendering
-target-language code.
+generator may parse already-validated JSON before rendering target-language code.
 
 ## What Belongs Here
 
@@ -41,7 +40,7 @@ onedef_ir/
     cases.json
   validator/
     document.go
-    types.go
+    schema.go
 ```
 
 ## Package Boundaries

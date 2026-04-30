@@ -4,8 +4,8 @@ Conformance exists so every server implementation and every SDK generator can
 agree on the same IR behavior.
 
 JSON Schema validation is necessary but not enough. Some rules require semantic
-checks, such as duplicate type names, unknown named type references, and matching
-path variables to `request.pathParams`.
+checks, such as duplicate model names, unknown named type references, and matching
+path variables to `request.paths`.
 
 ## Producers
 
@@ -24,14 +24,18 @@ A consumer is conformant when it:
 - rejects all files listed as invalid in `cases.json`;
 - normalizes omitted or `null` arrays as empty arrays;
 - treats missing endpoint `error` as `DefaultError`;
-- ignores unknown fields while rejecting unknown type kinds.
+- rejects unknown fields, malformed type expressions, and unknown
+  named type references.
 
 ## Semantic Error Codes
 
 Implementations do not need to expose these exact strings to users, but tests
 should map failures to equivalent categories.
 
-- `duplicate_type`
+- `duplicate_model`
+- `duplicate_name`
+- `duplicate_binding`
+- `duplicate_header`
 - `unknown_type_ref`
 - `invalid_type_ref`
 - `path_param_mismatch`
