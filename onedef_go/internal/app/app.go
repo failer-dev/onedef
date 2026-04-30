@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -20,6 +21,7 @@ type App struct {
 	endpoints        []meta.EndpointStruct
 	groupedEndpoints []meta.EndpointStruct
 	groups           []*meta.GroupMeta
+	routeHeaders     []meta.HeaderContract
 	definitionRoots  []meta.GroupNode
 	definitionsReady bool
 }
@@ -348,6 +350,11 @@ func (a *App) registerGroupNode(
 		nextVisiblePath = append(nextVisiblePath, lastPathSegment(node.Path))
 	}
 	providerHeaders := subtractHeaderContracts(finalHeaders, boundHeaders)
+	if !node.Exposed && len(visiblePath) == 0 {
+		for _, header := range providerHeaders {
+			a.routeHeaders = upsertHeaderContract(a.routeHeaders, header)
+		}
+	}
 	nextBoundHeaders := cloneHeaderContracts(boundHeaders)
 	if node.Exposed {
 		nextBoundHeaders = cloneHeaderContracts(finalHeaders)
@@ -656,6 +663,7 @@ func (a *App) buildIRJSON(initialisms []string) ([]byte, error) {
 
 	doc, err := irbuild.BuildDocument(irbuild.Options{
 		Initialisms: initialisms,
+		Headers:     a.routeHeaders,
 		Endpoints:   ungrouped,
 		Groups:      a.groups,
 	})
@@ -663,9 +671,12 @@ func (a *App) buildIRJSON(initialisms []string) ([]byte, error) {
 		return nil, err
 	}
 
-	encoded, err := json.MarshalIndent(doc, "", "  ")
-	if err != nil {
+	var buffer bytes.Buffer
+	encoder := json.NewEncoder(&buffer)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(doc); err != nil {
 		return nil, fmt.Errorf("onedef: failed to encode IR JSON: %w", err)
 	}
-	return encoded, nil
+	return bytes.TrimSuffix(buffer.Bytes(), []byte("\n")), nil
 }

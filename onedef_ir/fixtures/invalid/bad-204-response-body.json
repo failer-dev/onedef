@@ -1,32 +1,35 @@
 {
   "version": "v1",
-  "endpoints": [
-    {
-      "name": "DeleteUser",
-      "method": "DELETE",
-      "path": "/users/{id}",
-      "successStatus": 204,
-      "request": {
-        "pathParams": [
-          {
-            "name": "ID",
-            "wireName": "id",
-            "type": { "kind": "uuid" },
-            "required": true
-          }
-        ]
-      },
-      "response": {
-        "envelope": true,
-        "body": { "kind": "named", "name": "User" }
-      }
-    }
-  ],
-  "types": [
+  "models": [
     {
       "name": "User",
       "kind": "object",
       "fields": []
     }
-  ]
+  ],
+  "routes": {
+    "headers": [],
+    "endpoints": [
+      {
+        "name": "DeleteUser",
+        "method": "DELETE",
+        "path": "/users/{id}",
+        "successStatus": 204,
+        "request": {
+          "paths": [
+            {
+              "name": "ID",
+              "key": "id",
+              "type": "uuid"
+            }
+          ]
+        },
+        "response": {
+          "envelope": true,
+          "body": "User"
+        }
+      }
+    ],
+    "groups": []
+  }
 }

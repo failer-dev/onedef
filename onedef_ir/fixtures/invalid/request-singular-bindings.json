@@ -1,16 +1,14 @@
 {
   "version": "v1",
-  "models": [],
   "routes": {
-    "headers": [],
     "endpoints": [
       {
         "name": "GetUser",
         "method": "GET",
         "path": "/users/{id}",
-        "successStatus": 200,
+        "successStatus": 204,
         "request": {
-          "paths": [
+          "path": [
             {
               "name": "ID",
               "key": "id",
@@ -19,11 +17,11 @@
           ]
         },
         "response": {
-          "envelope": true,
-          "body": "MissingUser"
+          "envelope": false
         }
       }
     ],
     "groups": []
-  }
+  },
+  "models": []
 }

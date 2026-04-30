@@ -1,80 +1,17 @@
 {
   "version": "v1",
-  "naming": {
-    "initialisms": ["ID"]
-  },
-  "groups": [
-    {
-      "id": "user",
-      "name": "user",
-      "pathSegments": ["user"],
-      "requiredHeaders": ["Authorization"],
-      "providerHeaders": [
-        {
-          "name": "Authorization",
-          "wireName": "Authorization",
-          "type": {
-            "kind": "string"
-          },
-          "required": true,
-          "description": "Bearer access token.",
-          "examples": ["Bearer demo-token"]
-        }
-      ],
-      "endpoints": [
-        {
-          "name": "CreateUser",
-          "method": "POST",
-          "path": "/api/v1/users",
-          "successStatus": 201,
-          "request": {
-            "headerParams": [
-              {
-                "name": "IdempotencyKey",
-                "wireName": "Idempotency-Key",
-                "type": {
-                  "kind": "int"
-                },
-                "required": true
-              },
-              {
-                "name": "RequestId",
-                "wireName": "X-Request-Id",
-                "type": {
-                  "kind": "string",
-                  "nullable": true
-                },
-                "required": false
-              }
-            ],
-            "body": {
-              "kind": "named",
-              "name": "CreateUserRequest"
-            }
-          },
-          "response": {
-            "envelope": true,
-            "body": {
-              "kind": "named",
-              "name": "User"
-            }
-          }
-        }
-      ],
-      "groups": []
-    }
+  "initialisms": [
+    "ID"
   ],
-  "types": [
+  "models": [
     {
       "name": "CreateUserRequest",
       "kind": "object",
       "fields": [
         {
           "name": "Name",
-          "wireName": "name",
-          "type": {
-            "kind": "string"
-          },
+          "key": "name",
+          "type": "string",
           "required": true
         }
       ]
@@ -85,21 +22,66 @@
       "fields": [
         {
           "name": "ID",
-          "wireName": "id",
-          "type": {
-            "kind": "string"
-          },
+          "key": "id",
+          "type": "string",
           "required": true
         },
         {
           "name": "Name",
-          "wireName": "name",
-          "type": {
-            "kind": "string"
-          },
+          "key": "name",
+          "type": "string",
           "required": true
         }
       ]
     }
-  ]
+  ],
+  "routes": {
+    "headers": [],
+    "endpoints": [],
+    "groups": [
+      {
+        "name": "user",
+        "endpoints": [
+          {
+            "name": "CreateUser",
+            "method": "POST",
+            "path": "/api/v1/users",
+            "successStatus": 201,
+            "request": {
+              "body": "CreateUserRequest",
+              "headers": [
+                {
+                  "name": "IdempotencyKey",
+                  "key": "Idempotency-Key",
+                  "type": "int",
+                  "required": true
+                },
+                {
+                  "name": "RequestId",
+                  "key": "X-Request-Id",
+                  "type": "string?",
+                  "required": false
+                }
+              ]
+            },
+            "response": {
+              "envelope": true,
+              "body": "User"
+            }
+          }
+        ],
+        "groups": [],
+        "headers": [
+          {
+            "key": "Authorization",
+            "type": "string",
+            "description": "Bearer access token.",
+            "examples": [
+              "Bearer demo-token"
+            ]
+          }
+        ]
+      }
+    ]
+  }
 }

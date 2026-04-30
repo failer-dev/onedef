@@ -408,8 +408,11 @@ func TestAppBuildGroupedSDKSpecJSON_IncludesGroupTreeAndHeaders(t *testing.T) {
 	if !strings.Contains(spec, `"name": "users"`) {
 		t.Fatalf("spec = %s, want users group", spec)
 	}
-	if !strings.Contains(spec, `"requiredHeaders": [`) || !strings.Contains(spec, `"Authorization"`) {
+	if !strings.Contains(spec, `"headers": [`) || !strings.Contains(spec, `"Authorization"`) {
 		t.Fatalf("spec = %s, want Authorization header", spec)
+	}
+	if strings.Contains(spec, `"header": [`) {
+		t.Fatalf("spec = %s, should use headers not header", spec)
 	}
 	if !strings.Contains(spec, `"path": "/api/v1/users/{id}"`) {
 		t.Fatalf("spec = %s, want full grouped path", spec)
@@ -437,7 +440,7 @@ func TestAppBuildGroupedSDKSpecJSON_IncludesEndpointSDKName(t *testing.T) {
 	}
 
 	spec := decodeIRDocument(t, specJSON)
-	users := findIRGroupByID(t, spec.Groups, "users")
+	users := findIRGroupByPathString(t, spec.Routes.Groups, "users")
 	if got := users.Endpoints[0].Name; got != "GroupedSpecTestEndpoint" {
 		t.Fatalf("endpoint name = %q, want %q", got, "GroupedSpecTestEndpoint")
 	}
@@ -445,7 +448,7 @@ func TestAppBuildGroupedSDKSpecJSON_IncludesEndpointSDKName(t *testing.T) {
 		t.Fatalf("endpoint sdk name = %q, want %q", got, "get")
 	}
 
-	orders := findIRGroupByID(t, spec.Groups, "orders")
+	orders := findIRGroupByPathString(t, spec.Routes.Groups, "orders")
 	if got := orders.Endpoints[0].SDKName; got != "" {
 		t.Fatalf("endpoint sdk name = %q, want empty", got)
 	}
@@ -529,16 +532,16 @@ func TestAppErrorPolicy_SubgroupOverrideReflectedInIR(t *testing.T) {
 	}
 
 	spec := decodeIRDocument(t, specJSON)
-	users := findIRGroupByID(t, spec.Groups, "users")
+	users := findIRGroupByPathString(t, spec.Routes.Groups, "users")
 	if got := users.Endpoints[0].Error.Body.Name; got != "GroupedSpecTestError" {
 		t.Fatalf("users error body = %q, want GroupedSpecTestError", got)
 	}
-	orders := findIRGroupByID(t, spec.Groups, "orders")
+	orders := findIRGroupByPathString(t, spec.Routes.Groups, "orders")
 	if got := orders.Endpoints[0].Error.Body.Name; got != "GroupedSpecEndpointError" {
 		t.Fatalf("orders error body = %q, want GroupedSpecEndpointError", got)
 	}
-	if !irDocumentHasType(spec, "GroupedSpecEndpointError") {
-		t.Fatalf("spec types = %#v, want GroupedSpecEndpointError", spec.Types)
+	if !irDocumentHasModel(spec, "GroupedSpecEndpointError") {
+		t.Fatalf("spec models = %#v, want GroupedSpecEndpointError", spec.Models)
 	}
 }
 
@@ -572,14 +575,14 @@ func TestAppBuildGroupedSDKSpecJSON_AllowsDuplicateLeafGroupsUnderDifferentParen
 	}
 
 	spec := decodeIRDocument(t, specJSON)
-	branchBooking := findIRGroupByID(t, spec.Groups, "branch.booking")
-	customerBooking := findIRGroupByID(t, spec.Groups, "customer.booking")
+	branchBooking := findIRGroupByPathString(t, spec.Routes.Groups, "branch.booking")
+	customerBooking := findIRGroupByPathString(t, spec.Routes.Groups, "customer.booking")
 
-	if got := strings.Join(branchBooking.PathSegments, "."); got != "branch.booking" {
-		t.Fatalf("branch booking path segments = %q, want %q", got, "branch.booking")
+	if branchBooking.Name != "booking" {
+		t.Fatalf("branch booking name = %q, want booking", branchBooking.Name)
 	}
-	if got := strings.Join(customerBooking.PathSegments, "."); got != "customer.booking" {
-		t.Fatalf("customer booking path segments = %q, want %q", got, "customer.booking")
+	if customerBooking.Name != "booking" {
+		t.Fatalf("customer booking name = %q, want booking", customerBooking.Name)
 	}
 }
 
@@ -619,7 +622,7 @@ func TestAppBuildGroupedSDKSpecJSON_HeaderParamsMarkedRequired(t *testing.T) {
 	}
 
 	spec := string(specJSON)
-	if !strings.Contains(spec, `"wireName": "X-Request-Id"`) {
+	if !strings.Contains(spec, `"key": "X-Request-Id"`) {
 		t.Fatalf("spec = %s, want request header", spec)
 	}
 	if !strings.Contains(spec, `"required": true`) {
@@ -648,13 +651,13 @@ func TestAppBuildGroupedSDKSpecJSON_UsesQualifiedEndpointIdentity(t *testing.T) 
 	}
 
 	spec := decodeIRDocument(t, specJSON)
-	groupOne := findIRGroupByID(t, spec.Groups, "one")
-	groupTwo := findIRGroupByID(t, spec.Groups, "two")
+	groupOne := findIRGroupByPathString(t, spec.Routes.Groups, "one")
+	groupTwo := findIRGroupByPathString(t, spec.Routes.Groups, "two")
 
-	if got := groupOne.Endpoints[0].Request.PathParams[0].WireName; got != "id" {
+	if got := groupOne.Endpoints[0].Request.Paths[0].Key; got != "id" {
 		t.Fatalf("group one path param = %q, want %q", got, "id")
 	}
-	if got := groupTwo.Endpoints[0].Request.PathParams[0].WireName; got != "slug" {
+	if got := groupTwo.Endpoints[0].Request.Paths[0].Key; got != "slug" {
 		t.Fatalf("group two path param = %q, want %q", got, "slug")
 	}
 }
@@ -678,19 +681,45 @@ func TestAppGenerateIRJSON_BuildsGroupedSpecWithInitialisms(t *testing.T) {
 		t.Fatalf("GenerateIRJSON() error = %v", err)
 	}
 
-	spec := decodeIRDocument(t, specJSON)
-	if spec.Naming == nil || strings.Join(spec.Naming.Initialisms, ",") != "ID" {
-		t.Fatalf("Naming = %#v, want ID", spec.Naming)
+	var topLevel map[string]json.RawMessage
+	if err := json.Unmarshal(specJSON, &topLevel); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
-	users := findIRGroupByID(t, spec.Groups, "users")
+	if _, ok := topLevel["routes"]; !ok {
+		t.Fatalf("top-level keys = %#v, want routes", topLevel)
+	}
+	if _, ok := topLevel["models"]; !ok {
+		t.Fatalf("top-level keys = %#v, want models", topLevel)
+	}
+	if _, ok := topLevel["types"]; ok {
+		t.Fatalf("top-level types should be omitted: %s", specJSON)
+	}
+	if _, ok := topLevel["endpoints"]; ok {
+		t.Fatalf("top-level endpoints should be omitted: %s", specJSON)
+	}
+	if _, ok := topLevel["groups"]; ok {
+		t.Fatalf("top-level groups should be omitted: %s", specJSON)
+	}
+	if strings.Contains(string(specJSON), `"group":`) {
+		t.Fatalf("endpoint group field should be omitted: %s", specJSON)
+	}
+	if strings.Contains(string(specJSON), `"nullable":`) {
+		t.Fatalf("field nullable should be represented only in type expressions: %s", specJSON)
+	}
+
+	spec := decodeIRDocument(t, specJSON)
+	if strings.Join(spec.Initialisms, ",") != "ID" {
+		t.Fatalf("Initialisms = %#v, want ID", spec.Initialisms)
+	}
+	users := findIRGroupByPathString(t, spec.Routes.Groups, "users")
 	if len(users.Endpoints) != 1 {
 		t.Fatalf("len(users.Endpoints) = %d, want 1", len(users.Endpoints))
 	}
 	if got := users.Endpoints[0].Path; got != "/api/v1/users/{id}" {
 		t.Fatalf("endpoint path = %q, want grouped full path", got)
 	}
-	if !containsStringFold(users.Endpoints[0].RequiredHeaders, "Authorization") {
-		t.Fatalf("required headers = %#v, want Authorization", users.Endpoints[0].RequiredHeaders)
+	if !containsHeaderFold(users.Headers, "Authorization") {
+		t.Fatalf("group header = %#v, want Authorization", users.Headers)
 	}
 }
 
@@ -709,16 +738,16 @@ func TestAppGenerateIRJSON_IncludesUngroupedAndGroupedEndpoints(t *testing.T) {
 	}
 
 	spec := decodeIRDocument(t, specJSON)
-	if len(spec.Endpoints) != 1 {
-		t.Fatalf("len(Endpoints) = %d, want 1", len(spec.Endpoints))
+	if len(spec.Routes.Endpoints) != 1 {
+		t.Fatalf("len(Endpoints) = %d, want 1", len(spec.Routes.Endpoints))
 	}
-	if got := spec.Endpoints[0].Name; got != "createUserEndpoint" {
+	if got := spec.Routes.Endpoints[0].Name; got != "createUserEndpoint" {
 		t.Fatalf("flat endpoint name = %q, want createUserEndpoint", got)
 	}
-	if got := spec.Endpoints[0].Path; got != "/api/v1/users" {
+	if got := spec.Routes.Endpoints[0].Path; got != "/api/v1/users" {
 		t.Fatalf("flat endpoint path = %q, want root-prefixed path", got)
 	}
-	users := findIRGroupByID(t, spec.Groups, "users")
+	users := findIRGroupByPathString(t, spec.Routes.Groups, "users")
 	if len(users.Endpoints) != 1 {
 		t.Fatalf("len(users.Endpoints) = %d, want 1", len(users.Endpoints))
 	}
@@ -788,9 +817,9 @@ func TestAppGroup_OmitHeaderRemovesInheritedAuth(t *testing.T) {
 	}
 
 	spec := decodeIRDocument(t, specJSON)
-	public := findIRGroupByID(t, spec.Groups, "users.public")
-	if containsStringFold(public.Endpoints[0].RequiredHeaders, "Authorization") {
-		t.Fatalf("public endpoint headers = %#v, should not contain Authorization", public.Endpoints[0].RequiredHeaders)
+	public := findIRGroupByPathString(t, spec.Routes.Groups, "users.public")
+	if containsHeaderFold(public.Headers, "Authorization") {
+		t.Fatalf("public group headers = %#v, should not contain Authorization", public.Headers)
 	}
 }
 
@@ -817,13 +846,18 @@ func TestAppGroup_OmitHeaderMatchesAuthorizationExactlyAndCaseInsensitively(t *t
 	}
 
 	spec := decodeIRDocument(t, specJSON)
-	public := findIRGroupByID(t, spec.Groups, "users.public")
-	headers := public.Endpoints[0].RequiredHeaders
-	if containsStringFold(headers, "Authorization") {
+	users := findIRGroupByPathString(t, spec.Routes.Groups, "users")
+	if !containsHeaderFold(users.Headers, "X-Authorization-Token") {
+		t.Fatalf("users group headers = %#v, want X-Authorization-Token", users.Headers)
+	}
+
+	public := findIRGroupByPathString(t, spec.Routes.Groups, "users.public")
+	headers := public.Headers
+	if containsHeaderFold(headers, "Authorization") {
 		t.Fatalf("public endpoint headers = %#v, should not contain Authorization", headers)
 	}
-	if !containsStringFold(headers, "X-Authorization-Token") {
-		t.Fatalf("public endpoint headers = %#v, want X-Authorization-Token", headers)
+	if containsHeaderFold(headers, "X-Authorization-Token") {
+		t.Fatalf("public endpoint headers = %#v, should inherit X-Authorization-Token from parent only", headers)
 	}
 }
 
@@ -856,9 +890,9 @@ func TestAppGroup_AllowsStructHeaderBindingForInheritedHeader(t *testing.T) {
 		t.Fatalf("buildIRJSON() error = %v", err)
 	}
 	spec := decodeIRDocument(t, specJSON)
-	secure := findIRGroupByID(t, spec.Groups, "secure")
-	if len(secure.Endpoints[0].Request.HeaderParams) != 0 {
-		t.Fatalf("header params = %#v, want no method params for group-bound header", secure.Endpoints[0].Request.HeaderParams)
+	secure := findIRGroupByPathString(t, spec.Routes.Groups, "secure")
+	if len(secure.Endpoints[0].Request.Headers) != 0 {
+		t.Fatalf("header params = %#v, want no method params for group-bound header", secure.Endpoints[0].Request.Headers)
 	}
 }
 
@@ -943,8 +977,8 @@ func TestAppGroup_EndpointRequireHeaderWithoutStructBindingSynthesizesStringPara
 	}
 
 	spec := decodeIRDocument(t, specJSON)
-	synthetic := findIRGroupByID(t, spec.Groups, "synthetic")
-	params := synthetic.Endpoints[0].Request.HeaderParams
+	synthetic := findIRGroupByPathString(t, spec.Routes.Groups, "synthetic")
+	params := synthetic.Endpoints[0].Request.Headers
 	if len(params) != 1 {
 		t.Fatalf("len(header params) = %d, want 1", len(params))
 	}
@@ -1002,8 +1036,8 @@ func TestAppGroup_EndpointRequireHeaderUsesTypedStructBinding(t *testing.T) {
 		t.Fatalf("buildIRJSON() error = %v", err)
 	}
 	spec := decodeIRDocument(t, specJSON)
-	orders := findIRGroupByID(t, spec.Groups, "orders")
-	params := orders.Endpoints[0].Request.HeaderParams
+	orders := findIRGroupByPathString(t, spec.Routes.Groups, "orders")
+	params := orders.Endpoints[0].Request.Headers
 	if len(params) != 1 {
 		t.Fatalf("len(header params) = %d, want 1", len(params))
 	}
@@ -1034,9 +1068,9 @@ func TestAppGroup_OmitHeaderRemovesAnyInheritedHeader(t *testing.T) {
 	}
 
 	spec := decodeIRDocument(t, specJSON)
-	public := findIRGroupByID(t, spec.Groups, "users.public")
-	if containsStringFold(public.Endpoints[0].RequiredHeaders, "X-Custom-Id") {
-		t.Fatalf("public endpoint headers = %#v, should not contain X-Custom-Id", public.Endpoints[0].RequiredHeaders)
+	public := findIRGroupByPathString(t, spec.Routes.Groups, "users.public")
+	if containsHeaderFold(public.Headers, "X-Custom-Id") {
+		t.Fatalf("public group headers = %#v, should not contain X-Custom-Id", public.Headers)
 	}
 }
 
@@ -1442,37 +1476,36 @@ func decodeIRDocument(t *testing.T, specJSON []byte) ir.Document {
 	return spec
 }
 
-func findIRGroupByID(t *testing.T, groups []ir.Group, id string) ir.Group {
+func findIRGroupByPathString(t *testing.T, groups []ir.Group, path string) ir.Group {
 	t.Helper()
 
-	for _, group := range groups {
-		if group.ID == id {
-			return group
-		}
-		if found := findIRGroupByIDOrEmpty(group.Groups, id); found != nil {
-			return *found
-		}
+	if found := findIRGroupByPath(groups, strings.Split(path, ".")); found != nil {
+		return *found
 	}
 
-	t.Fatalf("group %q not found", id)
+	t.Fatalf("group %q not found", path)
 	return ir.Group{}
 }
 
-func findIRGroupByIDOrEmpty(groups []ir.Group, id string) *ir.Group {
+func findIRGroupByPath(groups []ir.Group, path []string) *ir.Group {
+	if len(path) == 0 {
+		return nil
+	}
 	for _, group := range groups {
-		if group.ID == id {
+		if group.Name != path[0] {
+			continue
+		}
+		if len(path) == 1 {
 			return &group
 		}
-		if found := findIRGroupByIDOrEmpty(group.Groups, id); found != nil {
-			return found
-		}
+		return findIRGroupByPath(group.Groups, path[1:])
 	}
 	return nil
 }
 
-func irDocumentHasType(spec ir.Document, name string) bool {
-	for _, typeDef := range spec.Types {
-		if typeDef.Name == name {
+func irDocumentHasModel(spec ir.Document, name string) bool {
+	for _, modelDef := range spec.Models {
+		if modelDef.Name == name {
 			return true
 		}
 	}
@@ -1482,6 +1515,15 @@ func irDocumentHasType(spec ir.Document, name string) bool {
 func containsStringFold(values []string, target string) bool {
 	for _, value := range values {
 		if strings.EqualFold(value, target) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsHeaderFold(values []ir.Header, target string) bool {
+	for _, value := range values {
+		if strings.EqualFold(value.Key, target) {
 			return true
 		}
 	}

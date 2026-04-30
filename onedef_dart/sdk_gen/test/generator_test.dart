@@ -27,7 +27,8 @@ void main() {
 
     final client = files['lib/src/client.dart']!;
     expect(client, contains('class ApiClient'));
-    expect(client, contains('final UserGroup user;'));
+    expect(client, contains('UserGroup user = const UserGroup(),'));
+    expect(client, contains('final UserGroupClient user;'));
     expect(
       client,
       contains('Future<Result<HealthStatus, DefaultError>> health('),
@@ -43,6 +44,7 @@ void main() {
     expect(group, contains("import '../../models.dart';"));
     expect(group, contains("import 'models.dart';"));
     expect(group, contains('class UserGroup'));
+    expect(group, contains('class UserGroupClient'));
     expect(group, contains('Future<Result<User, DefaultError>> createUser('));
     expect(group, contains('Future<Result<void, DefaultError>> deleteUser('));
     expect(
@@ -186,51 +188,44 @@ void main() {
   test('renderPackage uses sdkName override for method names', () async {
     final spec = Spec(
       version: 'v1',
-      naming: NamingSpec(initialisms: const []),
-      endpoints: const [],
-      groups: [
-        GroupSpec(
-          id: 'customer',
-          name: 'customer',
-          pathSegments: const ['customer'],
-          requiredHeaders: const [],
-          endpoints: [
-            Endpoint(
-              name: 'GetUser',
-              sdkName: 'get',
-              method: 'GET',
-              path: '/customers',
-              successStatus: 204,
-              group: '',
-              requiredHeaders: const [],
-              request: RequestSpec(
-                pathParams: const [],
-                queryParams: const [],
-                headerParams: const [],
-                body: null,
+      routes: RoutesSpec(
+        groups: [
+          GroupSpec(
+            name: 'customer',
+            endpoints: [
+              Endpoint(
+                name: 'GetUser',
+                sdkName: 'get',
+                method: 'GET',
+                path: '/customers',
+                successStatus: 204,
+                request: RequestSpec(
+                  paths: const [],
+                  queries: const [],
+                  headers: const [],
+                  body: null,
+                ),
+                response: ResponseSpec(envelope: false, body: null),
               ),
-              response: ResponseSpec(envelope: false, body: null),
-            ),
-            Endpoint(
-              name: 'ListUsers',
-              method: 'GET',
-              path: '/customers',
-              successStatus: 204,
-              group: '',
-              requiredHeaders: const [],
-              request: RequestSpec(
-                pathParams: const [],
-                queryParams: const [],
-                headerParams: const [],
-                body: null,
+              Endpoint(
+                name: 'ListUsers',
+                method: 'GET',
+                path: '/customers',
+                successStatus: 204,
+                request: RequestSpec(
+                  paths: const [],
+                  queries: const [],
+                  headers: const [],
+                  body: null,
+                ),
+                response: ResponseSpec(envelope: false, body: null),
               ),
-              response: ResponseSpec(envelope: false, body: null),
-            ),
-          ],
-          groups: const [],
-        ),
-      ],
-      types: const [],
+            ],
+            groups: const [],
+          ),
+        ],
+      ),
+      models: const [],
     );
 
     final files = renderPackage(
@@ -251,33 +246,39 @@ void main() {
   test('renderPackage does not apply undeclared initialisms', () async {
     final spec = Spec(
       version: 'v1',
-      naming: NamingSpec(initialisms: const []),
-      endpoints: [
-        Endpoint(
-          name: 'FindByID',
-          method: 'GET',
-          path: '/bookings/{id}',
-          successStatus: 204,
-          group: 'booking',
-          requiredHeaders: const [],
-          request: RequestSpec(
-            pathParams: [
-              Parameter(
-                name: 'ID',
-                wireName: 'id',
-                type: TypeRef(kind: 'string', name: '', nullable: false),
-                required: true,
+      routes: RoutesSpec(
+        groups: [
+          GroupSpec(
+            name: 'booking',
+            endpoints: [
+              Endpoint(
+                name: 'FindByID',
+                method: 'GET',
+                path: '/bookings/{id}',
+                successStatus: 204,
+                request: RequestSpec(
+                  paths: [
+                    Parameter(
+                      name: 'ID',
+                      key: 'id',
+                      type: TypeUsage(
+                        kind: TypeUsageKind.string,
+                        name: '',
+                        nullable: false,
+                      ),
+                    ),
+                  ],
+                  queries: const [],
+                  headers: const [],
+                  body: null,
+                ),
+                response: ResponseSpec(envelope: false, body: null),
               ),
             ],
-            queryParams: const [],
-            headerParams: const [],
-            body: null,
           ),
-          response: ResponseSpec(envelope: false, body: null),
-        ),
-      ],
-      groups: const [],
-      types: const [],
+        ],
+      ),
+      models: const [],
     );
 
     final files = renderPackage(
@@ -292,66 +293,66 @@ void main() {
   });
 
   test('renderPackage applies only IR-declared initialisms', () async {
-    final stringType = TypeRef(kind: 'string', name: '', nullable: false);
-    final resourceType = TypeRef(
-      kind: 'named',
+    final stringType = TypeUsage(
+      kind: TypeUsageKind.string,
+      name: '',
+      nullable: false,
+    );
+    final resourceType = TypeUsage(
+      kind: TypeUsageKind.named,
       name: 'Resource',
       nullable: false,
     );
     final spec = Spec(
       version: 'v1',
-      naming: NamingSpec(initialisms: const ['API', 'URL', 'OAuth']),
-      endpoints: [
-        Endpoint(
-          name: 'GetAPIURL',
-          method: 'GET',
-          path: '/resources/{api_url}',
-          successStatus: 200,
-          group: 'resource',
-          requiredHeaders: const [],
-          request: RequestSpec(
-            pathParams: [
-              Parameter(
-                name: 'APIURL',
-                wireName: 'api_url',
-                type: stringType,
-                required: true,
+      initialisms: const ['API', 'URL', 'OAuth'],
+      routes: RoutesSpec(
+        groups: [
+          GroupSpec(
+            name: 'resource',
+            endpoints: [
+              Endpoint(
+                name: 'GetAPIURL',
+                method: 'GET',
+                path: '/resources/{api_url}',
+                successStatus: 200,
+                request: RequestSpec(
+                  paths: [
+                    Parameter(name: 'APIURL', key: 'api_url', type: stringType),
+                  ],
+                  queries: [
+                    Parameter(
+                      name: 'OAuthToken',
+                      key: 'oauth_token',
+                      type: stringType,
+                    ),
+                  ],
+                  headers: const [],
+                  body: null,
+                ),
+                response: ResponseSpec(envelope: true, body: resourceType),
               ),
             ],
-            queryParams: [
-              Parameter(
-                name: 'OAuthToken',
-                wireName: 'oauth_token',
-                type: stringType,
-                required: false,
-              ),
-            ],
-            headerParams: const [],
-            body: null,
           ),
-          response: ResponseSpec(envelope: true, body: resourceType),
-        ),
-      ],
-      groups: const [],
-      types: [
-        TypeDef(
+        ],
+      ),
+      models: [
+        ModelDef(
           name: 'Resource',
           kind: 'object',
           fields: [
             FieldDef(
               name: 'APIURL',
-              wireName: 'api_url',
+              key: 'api_url',
               type: stringType,
               required: true,
-              nullable: false,
               omitEmpty: false,
             ),
             FieldDef(
               name: 'OAuthToken',
-              wireName: 'oauth_token',
+              key: 'oauth_token',
               type: stringType,
               required: true,
-              nullable: false,
               omitEmpty: false,
             ),
           ],
@@ -401,12 +402,9 @@ void main() {
 
     final client = files['lib/src/client.dart']!;
     expect(client, contains('class ApiClient'));
-    expect(client, contains('final UserGroup user;'));
-    expect(
-      client,
-      contains('required HeaderValueProvider<String> userAuthorization,'),
-    );
-    expect(client, contains('authorization: userAuthorization,'));
+    expect(client, contains('required UserGroup user,'));
+    expect(client, contains('final UserGroupClient user;'));
+    expect(client, contains('user: UserGroupClient._bind('));
     expect(client, contains("import 'groups/user/client.dart';"));
 
     final providers = files['lib/src/providers.dart']!;
@@ -418,6 +416,11 @@ void main() {
     expect(group, contains("import '../../providers.dart';"));
     expect(group, contains("import 'models.dart';"));
     expect(group, contains('class UserGroup'));
+    expect(group, contains('class UserGroupClient'));
+    expect(
+      group,
+      contains('required HeaderValueProvider<String> authorization,'),
+    );
     expect(group, contains('Future<Result<User, DefaultError>> createUser('));
     expect(
       group,
@@ -445,7 +448,8 @@ void main() {
     expect(
       group,
       contains(
-          "headers['Authorization'] = (await _authorization()).toString();"),
+        "headers['Authorization'] = (await _authorization()).toString();",
+      ),
     );
     expect(group, contains('required int idempotencyKey'));
     expect(
@@ -472,27 +476,33 @@ void main() {
   test('renderPackage keeps sibling group header providers separate', () {
     final spec = Spec(
       version: 'v1',
-      naming: NamingSpec(initialisms: const []),
-      endpoints: const [],
-      groups: [
-        GroupSpec(
-          id: 'customer',
-          name: 'customer',
-          pathSegments: const ['customer'],
-          requiredHeaders: const ['Authorization'],
-          endpoints: const [],
-          groups: const [],
-        ),
-        GroupSpec(
-          id: 'merchant',
-          name: 'merchant',
-          pathSegments: const ['merchant'],
-          requiredHeaders: const ['Authorization'],
-          endpoints: const [],
-          groups: const [],
-        ),
-      ],
-      types: const [],
+      routes: RoutesSpec(
+        groups: [
+          GroupSpec(
+            name: 'customer',
+            headers: const [
+              HeaderSpec(
+                key: 'Authorization',
+                type: TypeUsage(kind: TypeUsageKind.string),
+              ),
+            ],
+            endpoints: const [],
+            groups: const [],
+          ),
+          GroupSpec(
+            name: 'merchant',
+            headers: const [
+              HeaderSpec(
+                key: 'Authorization',
+                type: TypeUsage(kind: TypeUsageKind.string),
+              ),
+            ],
+            endpoints: const [],
+            groups: const [],
+          ),
+        ],
+      ),
+      models: const [],
     );
 
     final files = renderPackage(
@@ -502,20 +512,14 @@ void main() {
     );
 
     final client = files['lib/src/client.dart']!;
-    expect(
-      client,
-      contains('required HeaderValueProvider<String> customerAuthorization,'),
-    );
-    expect(
-      client,
-      contains('required HeaderValueProvider<String> merchantAuthorization,'),
-    );
+    expect(client, contains('required CustomerGroup customer,'));
+    expect(client, contains('required MerchantGroup merchant,'));
     expect(
       client,
       isNot(contains('required HeaderValueProvider<String> authorization,')),
     );
-    expect(client, contains('authorization: customerAuthorization,'));
-    expect(client, contains('authorization: merchantAuthorization,'));
+    expect(client, contains('customer: CustomerGroupClient._bind('));
+    expect(client, contains('merchant: MerchantGroupClient._bind('));
 
     final customer = files['lib/src/groups/customer/client.dart']!;
     expect(
@@ -529,6 +533,80 @@ void main() {
       contains('required HeaderValueProvider<String> authorization,'),
     );
   });
+
+  test(
+    'renderPackage inherits route root headers into root and child methods',
+    () {
+      final spec = Spec(
+        version: 'v1',
+        routes: RoutesSpec(
+          headers: const [
+            HeaderSpec(
+              key: 'Authorization',
+              type: TypeUsage(kind: TypeUsageKind.string),
+            ),
+          ],
+          endpoints: const [
+            Endpoint(
+              name: 'Health',
+              method: 'GET',
+              path: '/health',
+              successStatus: 204,
+              request: RequestSpec(),
+              response: ResponseSpec(envelope: false),
+            ),
+          ],
+          groups: const [
+            GroupSpec(
+              name: 'branch',
+              endpoints: [
+                Endpoint(
+                  name: 'ListBranches',
+                  method: 'GET',
+                  path: '/api/v1/branches',
+                  successStatus: 204,
+                  request: RequestSpec(),
+                  response: ResponseSpec(envelope: false),
+                ),
+              ],
+            ),
+          ],
+        ),
+        models: const [],
+      );
+
+      final files = renderPackage(
+        spec: spec,
+        packageName: 'branch_api',
+        corePath: '../sdk_core',
+      );
+
+      final client = files['lib/src/client.dart']!;
+      expect(
+        client,
+        contains('required HeaderValueProvider<String> authorization,'),
+      );
+      expect(client, contains('authorization: authorization,'));
+      expect(
+        client,
+        contains(
+          "headers['Authorization'] = (await _authorization()).toString();",
+        ),
+      );
+
+      final branchClient = files['lib/src/groups/branch/client.dart']!;
+      expect(
+        branchClient,
+        contains('required HeaderValueProvider<String> authorization,'),
+      );
+      expect(
+        branchClient,
+        contains(
+          "headers['Authorization'] = (await _authorization()).toString();",
+        ),
+      );
+    },
+  );
 
   test(
     'renderPackage emits unique nested group files and inherited providers',
@@ -571,63 +649,44 @@ void main() {
       final client = files['lib/src/client.dart']!;
       expect(client, isNot(contains('ScopeStrategy')));
       expect(client, contains('class ApiClient'));
-      expect(client, contains('final BranchGroup branch;'));
-      expect(client, contains('final CustomerGroup customer;'));
-      expect(
-        client,
-        contains('required HeaderValueProvider<String> branchAuthorization,'),
-      );
-      expect(
-        client,
-        contains('required HeaderValueProvider<int> branchBranchId,'),
-      );
-      expect(
-        client,
-        contains('required HeaderValueProvider<String> branchBookingScope,'),
-      );
-      expect(
-        client,
-        contains('required HeaderValueProvider<String> customerAuthorization,'),
-      );
-      expect(
-        client,
-        contains('required HeaderValueProvider<String> customerCustomerId,'),
-      );
+      expect(client, contains('required BranchGroup branch,'));
+      expect(client, contains('required CustomerGroup customer,'));
+      expect(client, contains('final BranchGroupClient branch;'));
+      expect(client, contains('final CustomerGroupClient customer;'));
       expect(
         client,
         isNot(contains('required HeaderValueProvider<String> authorization,')),
       );
-      expect(client, contains('authorization: branchAuthorization,'));
-      expect(client, contains('branchId: branchBranchId,'));
-      expect(client, contains('bookingScope: branchBookingScope,'));
-      expect(client, contains('authorization: customerAuthorization,'));
-      expect(client, contains('customerId: customerCustomerId,'));
+      expect(client, isNot(contains('branchBranchId')));
+      expect(client, isNot(contains('branchBookingScope')));
+      expect(client, contains('branch: BranchGroupClient._bind('));
+      expect(client, contains('customer: CustomerGroupClient._bind('));
 
       final branch = files['lib/src/groups/branch/client.dart']!;
       expect(branch, isNot(contains('ScopeStrategy')));
       expect(branch, contains("import '../branch_booking/client.dart';"));
       expect(branch, contains('class BranchGroup'));
-      expect(
-        branch,
-        contains('required HeaderValueProvider<String> bookingScope,'),
-      );
-      expect(branch, contains('BranchBookingGroup get booking'));
-      expect(branch, contains('authorization: _authorization,'));
-      expect(branch, contains('branchId: _branchId,'));
-      expect(branch, contains('bookingScope: _bookingScope,'));
+      expect(branch, contains('class BranchGroupClient'));
+      expect(branch, contains('required this.xBranchId,'));
+      expect(branch, contains('required this.booking,'));
+      expect(branch, contains('final BranchBookingGroupClient booking;'));
+      expect(branch, contains('xBranchId: config.xBranchId,'));
 
       final branchBooking = files['lib/src/groups/branch_booking/client.dart']!;
       expect(branchBooking, isNot(contains('ScopeStrategy')));
       expect(branchBooking, contains('class BranchBookingGroup'));
+      expect(branchBooking, contains('class BranchBookingGroupClient'));
       expect(
         branchBooking,
         contains('final HeaderValueProvider<String> _authorization;'),
       );
       expect(
-          branchBooking, contains('final HeaderValueProvider<int> _branchId;'));
+        branchBooking,
+        contains('final HeaderValueProvider<int> _xBranchId;'),
+      );
       expect(
         branchBooking,
-        contains('final HeaderValueProvider<String> _bookingScope;'),
+        contains('final HeaderValueProvider<String> _xBookingScope;'),
       );
       expect(
         branchBooking,
@@ -637,16 +696,18 @@ void main() {
       expect(
         branchBooking,
         contains(
-            "headers['Authorization'] = (await _authorization()).toString();"),
+          "headers['Authorization'] = (await _authorization()).toString();",
+        ),
       );
       expect(
         branchBooking,
-        contains("headers['X-Branch-Id'] = (await _branchId()).toString();"),
+        contains("headers['X-Branch-Id'] = (await _xBranchId()).toString();"),
       );
       expect(
         branchBooking,
         contains(
-            "headers['X-Booking-Scope'] = (await _bookingScope()).toString();"),
+          "headers['X-Booking-Scope'] = (await _xBookingScope()).toString();",
+        ),
       );
       expect(branchBooking, contains('required String idempotencyKey'));
       expect(
@@ -662,7 +723,7 @@ void main() {
       );
       expect(
         customerBooking,
-        contains('final HeaderValueProvider<String> _customerId;'),
+        contains('final HeaderValueProvider<String> _xCustomerId;'),
       );
       expect(
         customerBooking,
@@ -672,12 +733,14 @@ void main() {
       expect(
         customerBooking,
         contains(
-            "headers['Authorization'] = (await _authorization()).toString();"),
+          "headers['Authorization'] = (await _authorization()).toString();",
+        ),
       );
       expect(
         customerBooking,
         contains(
-            "headers['X-Customer-Id'] = (await _customerId()).toString();"),
+          "headers['X-Customer-Id'] = (await _xCustomerId()).toString();",
+        ),
       );
 
       final sharedModels = files['lib/src/models.dart']!;

@@ -1,0 +1,22 @@
+{
+  "version": "v1",
+  "routes": {
+    "endpoints": [],
+    "groups": []
+  },
+  "models": [
+    {
+      "name": "User",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "Name",
+          "key": "name",
+          "type": "string?",
+          "required": false,
+          "nullable": true
+        }
+      ]
+    }
+  ]
+}

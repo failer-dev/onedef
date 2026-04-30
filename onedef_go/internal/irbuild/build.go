@@ -13,13 +13,14 @@ import (
 
 type Options struct {
 	Initialisms []string
+	Headers     []meta.HeaderContract
 	Endpoints   []meta.EndpointStruct
 	Groups      []*meta.GroupMeta
 }
 
 func BuildDocument(opts Options) (*ir.Document, error) {
-	collector := typeCollector{
-		defs:     map[string]ir.TypeDef{},
+	collector := modelCollector{
+		models:   map[string]ir.ModelDef{},
 		building: map[string]bool{},
 	}
 
@@ -27,7 +28,16 @@ func BuildDocument(opts Options) (*ir.Document, error) {
 		Version: ir.VersionV1,
 	}
 	if initialisms := ir.NormalizeInitialisms(opts.Initialisms); len(initialisms) > 0 {
-		doc.Naming = &ir.Naming{Initialisms: initialisms}
+		doc.Initialisms = initialisms
+	}
+	rootHeaderKeys := map[string]struct{}{}
+	for _, header := range opts.Headers {
+		parsed, err := collector.parseHeaderContract(header, header.Name)
+		if err != nil {
+			return nil, err
+		}
+		doc.Routes.Headers = append(doc.Routes.Headers, parsed)
+		rootHeaderKeys[strings.TrimSpace(strings.ToLower(parsed.Key))] = struct{}{}
 	}
 
 	for _, endpoint := range opts.Endpoints {
@@ -35,48 +45,51 @@ func BuildDocument(opts Options) (*ir.Document, error) {
 		if err != nil {
 			return nil, err
 		}
-		doc.Endpoints = append(doc.Endpoints, parsed)
+		doc.Routes.Endpoints = append(doc.Routes.Endpoints, parsed)
 	}
-	doc.Endpoints = assignGroups(doc.Endpoints)
 
 	for _, group := range opts.Groups {
-		parsed, err := collector.parseGroup(group)
+		parsed, err := collector.parseGroup(group, rootHeaderKeys)
 		if err != nil {
 			return nil, err
 		}
-		doc.Groups = append(doc.Groups, parsed)
+		doc.Routes.Groups = append(doc.Routes.Groups, parsed)
 	}
 
 	for _, name := range collector.order {
-		doc.Types = append(doc.Types, collector.defs[name])
+		doc.Models = append(doc.Models, collector.models[name])
 	}
 
 	ir.Normalize(doc)
 	return doc, nil
 }
 
-type typeCollector struct {
-	defs     map[string]ir.TypeDef
+type modelCollector struct {
+	models   map[string]ir.ModelDef
 	building map[string]bool
 	order    []string
 }
 
-func (c *typeCollector) parseGroup(group *meta.GroupMeta) (ir.Group, error) {
+func (c *modelCollector) parseGroup(group *meta.GroupMeta, inheritedProviderHeaders map[string]struct{}) (ir.Group, error) {
 	if group == nil {
 		return ir.Group{}, wherr.Errorf("onedef: IR group must not be nil")
 	}
 	result := ir.Group{
-		ID:              group.ID,
-		Name:            group.Name,
-		PathSegments:    append([]string(nil), group.PathSegments...),
-		RequiredHeaders: headerWireNames(group.ProviderRequiredHeaders),
+		Name: group.Name,
 	}
 	for _, header := range group.ProviderRequiredHeaders {
-		param, err := c.parseHeaderContract(header, header.Name)
+		if _, ok := inheritedProviderHeaders[strings.TrimSpace(strings.ToLower(header.WireName))]; ok {
+			continue
+		}
+		parsed, err := c.parseHeaderContract(header, header.Name)
 		if err != nil {
 			return ir.Group{}, err
 		}
-		result.ProviderHeaders = append(result.ProviderHeaders, param)
+		result.Headers = append(result.Headers, parsed)
+	}
+	nextProviderHeaders := cloneHeaderKeySet(inheritedProviderHeaders)
+	for _, header := range result.Headers {
+		nextProviderHeaders[strings.TrimSpace(strings.ToLower(header.Key))] = struct{}{}
 	}
 	for _, endpoint := range group.Endpoints {
 		parsed, err := c.parseEndpoint(endpoint)
@@ -86,7 +99,7 @@ func (c *typeCollector) parseGroup(group *meta.GroupMeta) (ir.Group, error) {
 		result.Endpoints = append(result.Endpoints, parsed)
 	}
 	for _, child := range group.Children {
-		parsed, err := c.parseGroup(child)
+		parsed, err := c.parseGroup(child, nextProviderHeaders)
 		if err != nil {
 			return ir.Group{}, err
 		}
@@ -95,19 +108,26 @@ func (c *typeCollector) parseGroup(group *meta.GroupMeta) (ir.Group, error) {
 	return result, nil
 }
 
-func (c *typeCollector) parseEndpoint(endpoint meta.EndpointStruct) (ir.Endpoint, error) {
+func cloneHeaderKeySet(values map[string]struct{}) map[string]struct{} {
+	result := make(map[string]struct{}, len(values))
+	for key := range values {
+		result[key] = struct{}{}
+	}
+	return result
+}
+
+func (c *modelCollector) parseEndpoint(endpoint meta.EndpointStruct) (ir.Endpoint, error) {
 	structType := endpoint.StructType
 	if structType == nil {
 		return ir.Endpoint{}, wherr.Errorf("onedef: endpoint %q has nil struct type", endpoint.StructName)
 	}
 
 	result := ir.Endpoint{
-		Name:            endpoint.StructName,
-		SDKName:         endpoint.SDKName,
-		Method:          string(endpoint.Method),
-		Path:            endpoint.Path,
-		SuccessStatus:   endpoint.SuccessStatus,
-		RequiredHeaders: headerWireNames(endpoint.FinalRequiredHeaders),
+		Name:          endpoint.StructName,
+		SDKName:       endpoint.SDKName,
+		Method:        ir.HTTPMethod(endpoint.Method),
+		Path:          endpoint.Path,
+		SuccessStatus: endpoint.SuccessStatus,
 		Error: ir.Error{
 			Body: ir.TypeRef{Kind: ir.TypeKindNamed, Name: ir.BuiltinDefaultError},
 		},
@@ -118,11 +138,10 @@ func (c *typeCollector) parseEndpoint(endpoint meta.EndpointStruct) (ir.Endpoint
 		if err != nil {
 			return ir.Endpoint{}, err
 		}
-		result.Request.PathParams = append(result.Request.PathParams, ir.Parameter{
-			Name:     p.FieldName,
-			WireName: p.VariableName,
-			Type:     typeRef,
-			Required: true,
+		result.Request.Paths = append(result.Request.Paths, ir.Parameter{
+			Name: p.FieldName,
+			Key:  p.VariableName,
+			Type: typeRef,
 		})
 	}
 
@@ -131,11 +150,10 @@ func (c *typeCollector) parseEndpoint(endpoint meta.EndpointStruct) (ir.Endpoint
 		if err != nil {
 			return ir.Endpoint{}, err
 		}
-		result.Request.QueryParams = append(result.Request.QueryParams, ir.Parameter{
-			Name:     q.FieldName,
-			WireName: q.QueryKey,
-			Type:     typeRef,
-			Required: false,
+		result.Request.Queries = append(result.Request.Queries, ir.Parameter{
+			Name: q.FieldName,
+			Key:  q.QueryKey,
+			Type: typeRef,
 		})
 	}
 
@@ -147,9 +165,9 @@ func (c *typeCollector) parseEndpoint(endpoint meta.EndpointStruct) (ir.Endpoint
 		if err != nil {
 			return ir.Endpoint{}, err
 		}
-		result.Request.HeaderParams = append(result.Request.HeaderParams, ir.Parameter{
+		result.Request.Headers = append(result.Request.Headers, ir.HeaderParameter{
 			Name:        h.FieldName,
-			WireName:    h.Header.WireName,
+			Key:         h.Header.WireName,
 			Type:        typeRef,
 			Required:    h.Required,
 			Description: h.Header.Description,
@@ -190,33 +208,20 @@ func (c *typeCollector) parseEndpoint(endpoint meta.EndpointStruct) (ir.Endpoint
 	return result, nil
 }
 
-func (c *typeCollector) parseHeaderContract(header meta.HeaderContract, nameHint string) (ir.Parameter, error) {
+func (c *modelCollector) parseHeaderContract(header meta.HeaderContract, nameHint string) (ir.Header, error) {
 	typeRef, err := c.parseTypeRef(header.Type, nameHint)
 	if err != nil {
-		return ir.Parameter{}, err
+		return ir.Header{}, err
 	}
-	return ir.Parameter{
-		Name:        header.Name,
-		WireName:    header.WireName,
+	return ir.Header{
+		Key:         header.WireName,
 		Type:        typeRef,
-		Required:    true,
 		Description: header.Description,
 		Examples:    append([]string(nil), header.Examples...),
 	}, nil
 }
 
-func headerWireNames(headers []meta.HeaderContract) []string {
-	if len(headers) == 0 {
-		return nil
-	}
-	result := make([]string, 0, len(headers))
-	for _, header := range headers {
-		result = append(result, header.WireName)
-	}
-	return result
-}
-
-func (c *typeCollector) errorBodyTypeRef(t reflect.Type) (ir.TypeRef, error) {
+func (c *modelCollector) errorBodyTypeRef(t reflect.Type) (ir.TypeRef, error) {
 	if t == nil {
 		return ir.TypeRef{Kind: ir.TypeKindNamed, Name: ir.BuiltinDefaultError}, nil
 	}
@@ -233,7 +238,7 @@ func (c *typeCollector) errorBodyTypeRef(t reflect.Type) (ir.TypeRef, error) {
 	return c.parseTypeRef(t, t.Name())
 }
 
-func (c *typeCollector) parseRequestBody(structType reflect.Type, request meta.RequestField) (*ir.TypeRef, error) {
+func (c *modelCollector) parseRequestBody(structType reflect.Type, request meta.RequestField) (*ir.TypeRef, error) {
 	requestType := request.FieldType
 	include := make([]int, 0, requestType.NumField())
 	pathFieldIndexes := make([]int, 0, len(request.PathParameterFields))
@@ -280,7 +285,7 @@ func (c *typeCollector) parseRequestBody(structType reflect.Type, request meta.R
 	return &ir.TypeRef{Kind: ir.TypeKindNamed, Name: bodyName}, nil
 }
 
-func (c *typeCollector) parseTypeRef(t reflect.Type, nameHint string) (ir.TypeRef, error) {
+func (c *modelCollector) parseTypeRef(t reflect.Type, nameHint string) (ir.TypeRef, error) {
 	nullable := false
 	for t.Kind() == reflect.Pointer {
 		nullable = true
@@ -295,7 +300,7 @@ func (c *typeCollector) parseTypeRef(t reflect.Type, nameHint string) (ir.TypeRe
 	return typeRef, nil
 }
 
-func (c *typeCollector) parseNonPointerTypeRef(t reflect.Type, nameHint string) (ir.TypeRef, error) {
+func (c *modelCollector) parseNonPointerTypeRef(t reflect.Type, nameHint string) (ir.TypeRef, error) {
 	if isUUIDType(t) {
 		return ir.TypeRef{Kind: ir.TypeKindUUID}, nil
 	}
@@ -349,14 +354,14 @@ func (c *typeCollector) parseNonPointerTypeRef(t reflect.Type, nameHint string) 
 	}
 }
 
-func (c *typeCollector) ensureStructType(name string, t reflect.Type) error {
-	if existing, ok := c.defs[name]; ok && !c.building[name] {
-		next, err := c.buildTypeDef(name, t, nil)
+func (c *modelCollector) ensureStructType(name string, t reflect.Type) error {
+	if existing, ok := c.models[name]; ok && !c.building[name] {
+		next, err := c.buildModelDef(name, t, nil)
 		if err != nil {
 			return err
 		}
 		if !reflect.DeepEqual(existing, next) {
-			return wherr.Errorf("type name %q is defined with conflicting shapes", name)
+			return wherr.Errorf("model name %q is defined with conflicting shapes", name)
 		}
 		return nil
 	}
@@ -365,28 +370,28 @@ func (c *typeCollector) ensureStructType(name string, t reflect.Type) error {
 	}
 
 	c.order = append(c.order, name)
-	c.defs[name] = ir.TypeDef{Name: name, Kind: ir.TypeKindObject}
+	c.models[name] = ir.ModelDef{Name: name, Kind: ir.ModelKindObject}
 	c.building[name] = true
 
-	next, err := c.buildTypeDef(name, t, nil)
+	next, err := c.buildModelDef(name, t, nil)
 	if err != nil {
 		delete(c.building, name)
 		return err
 	}
 
-	c.defs[name] = next
+	c.models[name] = next
 	delete(c.building, name)
 	return nil
 }
 
-func (c *typeCollector) ensureSyntheticType(name string, t reflect.Type, include []int) error {
-	if existing, ok := c.defs[name]; ok && !c.building[name] {
-		next, err := c.buildTypeDef(name, t, include)
+func (c *modelCollector) ensureSyntheticType(name string, t reflect.Type, include []int) error {
+	if existing, ok := c.models[name]; ok && !c.building[name] {
+		next, err := c.buildModelDef(name, t, include)
 		if err != nil {
 			return err
 		}
 		if !reflect.DeepEqual(existing, next) {
-			return wherr.Errorf("type name %q is defined with conflicting shapes", name)
+			return wherr.Errorf("model name %q is defined with conflicting shapes", name)
 		}
 		return nil
 	}
@@ -395,24 +400,24 @@ func (c *typeCollector) ensureSyntheticType(name string, t reflect.Type, include
 	}
 
 	c.order = append(c.order, name)
-	c.defs[name] = ir.TypeDef{Name: name, Kind: ir.TypeKindObject}
+	c.models[name] = ir.ModelDef{Name: name, Kind: ir.ModelKindObject}
 	c.building[name] = true
 
-	next, err := c.buildTypeDef(name, t, include)
+	next, err := c.buildModelDef(name, t, include)
 	if err != nil {
 		delete(c.building, name)
 		return err
 	}
 
-	c.defs[name] = next
+	c.models[name] = next
 	delete(c.building, name)
 	return nil
 }
 
-func (c *typeCollector) buildTypeDef(name string, t reflect.Type, include []int) (ir.TypeDef, error) {
-	def := ir.TypeDef{
+func (c *modelCollector) buildModelDef(name string, t reflect.Type, include []int) (ir.ModelDef, error) {
+	def := ir.ModelDef{
 		Name: name,
-		Kind: ir.TypeKindObject,
+		Kind: ir.ModelKindObject,
 	}
 
 	includeAll := include == nil
@@ -432,15 +437,14 @@ func (c *typeCollector) buildTypeDef(name string, t reflect.Type, include []int)
 
 		typeRef, err := c.parseTypeRef(field.Type, name+field.Name)
 		if err != nil {
-			return ir.TypeDef{}, err
+			return ir.ModelDef{}, err
 		}
 
 		def.Fields = append(def.Fields, ir.FieldDef{
 			Name:      field.Name,
-			WireName:  inspect.WireName(field),
+			Key:       inspect.WireName(field),
 			Type:      typeRef,
 			Required:  !typeRef.Nullable && !fieldHasOmitEmpty(field),
-			Nullable:  typeRef.Nullable,
 			OmitEmpty: fieldHasOmitEmpty(field),
 		})
 	}

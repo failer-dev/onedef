@@ -51,95 +51,146 @@ Map<String, String> renderPackage({
   required String packageName,
   required String corePath,
 }) {
-  spec.validate();
-  return _withIdentifierInitialisms(spec.naming.initialisms, () {
-    if (spec.groups.isNotEmpty) {
-      return _renderGroupedPackage(spec, packageName, corePath);
-    }
-
-    final groups = _collectGroups(spec.endpoints);
-    final modelPlan = _planModels(
-      spec,
-      groupEndpoints: {
-        for (final entry in groups.entries)
-          _groupDirectoryNameForName(entry.key): entry.value,
-      },
-      rootEndpoints: spec.endpoints
-          .where((endpoint) => endpoint.group.isEmpty)
-          .toList(growable: false),
+  return _withIdentifierInitialisms(spec.initialisms, () {
+    final plan = _PackagePlan.fromSpec(
+      spec: spec,
+      packageName: packageName,
+      corePath: corePath,
     );
-    return <String, String>{
-      'pubspec.yaml': _renderPubspec(packageName, corePath: corePath),
-      'lib/$packageName.dart': _renderBarrel(packageName, groups.keys),
-      'lib/src/client.dart': _renderClient(spec, groups),
-      'lib/src/models.dart': _renderModels(modelPlan.sharedTypes),
-      'lib/src/providers.dart': _renderProvidersFile(),
-      for (final entry in groups.entries)
-        'lib/src/groups/${_groupDirectoryNameForName(entry.key)}/client.dart':
-            _renderGroup(
-          entry.key,
-          entry.value,
-        ),
-      for (final entry in groups.entries)
-        'lib/src/groups/${_groupDirectoryNameForName(entry.key)}/models.dart':
-            _renderModels(
-          modelPlan.localTypesFor(_groupDirectoryNameForName(entry.key)),
-          importSharedModels: true,
-        ),
-    };
+    return _renderPackagePlan(plan);
   });
 }
 
-Map<String, String> _renderGroupedPackage(
-  Spec spec,
-  String packageName,
-  String corePath,
-) {
-  final groupEntries = _flattenGroupEntries(spec.groups);
-  final modelPlan = _planModels(
-    spec,
-    groupEndpoints: {
-      for (final entry in groupEntries)
-        _groupDirectoryName(entry.group): entry.group.endpoints,
-    },
-    rootEndpoints: spec.endpoints
-        .where((endpoint) => endpoint.group.isEmpty)
-        .toList(growable: false),
-  );
+Map<String, String> _renderPackagePlan(_PackagePlan plan) {
   return <String, String>{
-    'pubspec.yaml': _renderPubspec(packageName, corePath: corePath),
-    'lib/$packageName.dart': _renderGroupedBarrel(groupEntries),
-    'lib/src/client.dart': _renderGroupedClient(spec),
-    'lib/src/models.dart': _renderModels(modelPlan.sharedTypes),
+    'pubspec.yaml': _renderPubspec(plan.packageName, corePath: plan.corePath),
+    'lib/${plan.packageName}.dart': _renderBarrel(plan.groupPlans),
+    'lib/src/client.dart': _renderApiClient(plan),
+    'lib/src/models.dart': _renderModels(plan.modelPlan.sharedModels),
     'lib/src/providers.dart': _renderProvidersFile(),
-    for (final entry in groupEntries)
-      'lib/src/groups/${_groupDirectoryName(entry.group)}/client.dart':
-          _renderGroupFile(
-        entry.group,
-        ancestors: entry.ancestors,
-      ),
-    for (final entry in groupEntries)
-      'lib/src/groups/${_groupDirectoryName(entry.group)}/models.dart':
+    for (final groupPlan in plan.groupPlans)
+      'lib/src/groups/${_groupDirectoryName(groupPlan)}/client.dart':
+          _renderGroupFile(groupPlan),
+    for (final groupPlan in plan.groupPlans)
+      'lib/src/groups/${_groupDirectoryName(groupPlan)}/models.dart':
           _renderModels(
-        modelPlan.localTypesFor(_groupDirectoryName(entry.group)),
-        importSharedModels: true,
-      ),
+            plan.modelPlan.localModelsFor(_groupDirectoryName(groupPlan)),
+            importSharedModels: true,
+          ),
   };
+}
+
+class _PackagePlan {
+  _PackagePlan({
+    required this.packageName,
+    required this.corePath,
+    required this.rootHeaders,
+    required this.rootEndpoints,
+    required this.rootGroupPlans,
+    required this.groupPlans,
+    required this.modelPlan,
+  });
+
+  factory _PackagePlan.fromSpec({
+    required Spec spec,
+    required String packageName,
+    required String corePath,
+  }) {
+    final groupPlans = _flattenGroupEntries(spec.routes.groups)
+        .map(
+          (entry) => _GroupPlan(
+            group: entry.group,
+            ancestors: entry.ancestors,
+            rootHeaders: spec.routes.headers,
+          ),
+        )
+        .toList(growable: false);
+    final rootEndpoints = spec.routes.endpoints;
+    final modelPlan = _planModels(
+      spec,
+      groupEndpoints: {
+        for (final groupPlan in groupPlans)
+          _groupDirectoryName(groupPlan): groupPlan.group.endpoints,
+      },
+      rootEndpoints: rootEndpoints,
+    );
+    return _PackagePlan(
+      packageName: packageName,
+      corePath: corePath,
+      rootHeaders: spec.routes.headers,
+      rootEndpoints: rootEndpoints,
+      rootGroupPlans: groupPlans
+          .where((groupPlan) => groupPlan.ancestors.isEmpty)
+          .toList(growable: false),
+      groupPlans: groupPlans,
+      modelPlan: modelPlan,
+    );
+  }
+
+  final String packageName;
+  final String corePath;
+  final List<HeaderSpec> rootHeaders;
+  final List<Endpoint> rootEndpoints;
+  final List<_GroupPlan> rootGroupPlans;
+  final List<_GroupPlan> groupPlans;
+  final _ModelPlan modelPlan;
+}
+
+class _GroupPlan {
+  _GroupPlan({
+    required this.group,
+    required this.ancestors,
+    required List<HeaderSpec> rootHeaders,
+  }) : ancestorHeaders = _uniqueHeaders([
+         ...rootHeaders,
+         ..._headersFromGroups(ancestors),
+       ]),
+       ownHeaders = _groupHeadersForGroup(group),
+       pathSegments = [
+         for (final ancestor in ancestors) ancestor.name,
+         group.name,
+       ];
+
+  final GroupSpec group;
+  final List<GroupSpec> ancestors;
+  final List<HeaderSpec> ancestorHeaders;
+  final List<HeaderSpec> ownHeaders;
+  final List<String> pathSegments;
+
+  List<HeaderSpec> get boundHeaders =>
+      _uniqueHeaders(<HeaderSpec>[...ancestorHeaders, ...ownHeaders]);
+
+  List<_EndpointMethodPlan> get methodPlans => group.endpoints
+      .map(
+        (endpoint) => _EndpointMethodPlan(
+          endpoint: endpoint,
+          groupHeaders: boundHeaders,
+          indent: '  ',
+        ),
+      )
+      .toList(growable: false);
+}
+
+class _EndpointMethodPlan {
+  const _EndpointMethodPlan({
+    required this.endpoint,
+    required this.groupHeaders,
+    required this.indent,
+  });
+
+  final Endpoint endpoint;
+  final List<HeaderSpec> groupHeaders;
+  final String indent;
+}
+
+class _ModelClassPlan {
+  const _ModelClassPlan(this.model);
+
+  final ModelDef model;
 }
 
 String _renderProvidersFile() {
   return 'typedef HeaderValueProvider<T> = Future<T> Function();\n';
-}
-
-Map<String, List<Endpoint>> _collectGroups(List<Endpoint> endpoints) {
-  final result = <String, List<Endpoint>>{};
-  for (final endpoint in endpoints) {
-    if (endpoint.group.isEmpty) {
-      continue;
-    }
-    result.putIfAbsent(endpoint.group, () => <Endpoint>[]).add(endpoint);
-  }
-  return result;
 }
 
 String _renderPubspec(
@@ -165,26 +216,7 @@ dependencies:
   return buffer.toString();
 }
 
-String _renderBarrel(String packageName, Iterable<String> groups) {
-  final buffer = StringBuffer()
-    ..writeln("export 'src/client.dart';")
-    ..writeln("export 'src/models.dart';")
-    ..writeln(
-      "export 'package:onedef_dart_sdk_core/onedef_dart_sdk_core.dart';",
-    )
-    ..writeln("export 'src/providers.dart';");
-  for (final group in groups) {
-    final directory = _groupDirectoryNameForName(group);
-    buffer
-      ..writeln("export 'src/groups/$directory/client.dart';")
-      ..writeln("export 'src/groups/$directory/models.dart';");
-  }
-  return buffer.toString();
-}
-
-String _renderGroupedBarrel(
-  List<({GroupSpec group, List<GroupSpec> ancestors})> groupEntries,
-) {
+String _renderBarrel(List<_GroupPlan> groupPlans) {
   final buffer = StringBuffer()
     ..writeln("export 'src/client.dart';")
     ..writeln("export 'src/models.dart';")
@@ -192,8 +224,8 @@ String _renderGroupedBarrel(
     ..writeln(
       "export 'package:onedef_dart_sdk_core/onedef_dart_sdk_core.dart';",
     );
-  for (final entry in groupEntries) {
-    final directory = _groupDirectoryName(entry.group);
+  for (final groupPlan in groupPlans) {
+    final directory = _groupDirectoryName(groupPlan);
     buffer
       ..writeln("export 'src/groups/$directory/client.dart';")
       ..writeln("export 'src/groups/$directory/models.dart';");
@@ -201,11 +233,7 @@ String _renderGroupedBarrel(
   return buffer.toString();
 }
 
-String _renderGroupedClient(Spec spec) {
-  final rootEndpoints = spec.endpoints
-      .where((endpoint) => endpoint.group.isEmpty)
-      .toList(growable: false);
-
+String _renderApiClient(_PackagePlan plan) {
   final buffer = StringBuffer()
     ..writeln('// ignore_for_file: unused_field, unused_import')
     ..writeln()
@@ -215,12 +243,13 @@ String _renderGroupedClient(Spec spec) {
     )
     ..writeln("import 'providers.dart';")
     ..writeln("export 'providers.dart';");
-  if (rootEndpoints.isNotEmpty) {
+  if (plan.rootEndpoints.isNotEmpty) {
     buffer.writeln("import 'models.dart';");
   }
-  for (final group in spec.groups) {
-    buffer
-        .writeln("import 'groups/${_groupDirectoryName(group)}/client.dart';");
+  for (final groupPlan in plan.rootGroupPlans) {
+    buffer.writeln(
+      "import 'groups/${_groupDirectoryName(groupPlan)}/client.dart';",
+    );
   }
 
   buffer
@@ -228,12 +257,13 @@ String _renderGroupedClient(Spec spec) {
     ..writeln('class ApiClient {')
     ..writeln('  factory ApiClient({')
     ..writeln('    required String baseUrl,');
-  for (final group in spec.groups) {
-    for (final header in _headersForGroupTree(group, ancestors: const [])) {
-      buffer.writeln(
-        '    required HeaderValueProvider<${_dartType(header.type)}> ${_groupHeaderProviderFieldName(group, header)},',
-      );
-    }
+  for (final header in plan.rootHeaders) {
+    buffer.writeln(
+      '    required HeaderValueProvider<${_dartType(header.type)}> ${_headerProviderFieldName(header)},',
+    );
+  }
+  for (final groupPlan in plan.rootGroupPlans) {
+    buffer.writeln(_renderGroupConfigParameter(groupPlan, indent: '    '));
   }
   buffer
     ..writeln('    http.Client? client,')
@@ -243,15 +273,23 @@ String _renderGroupedClient(Spec spec) {
     )
     ..writeln('    return ApiClient._(')
     ..writeln('      transport,');
-  for (final group in spec.groups) {
+  for (final header in plan.rootHeaders) {
     buffer.writeln(
-      '      ${_groupPropertyName(group)}: ${_groupClassName(group)}(',
+      '      ${_headerProviderFieldName(header)}: ${_headerProviderFieldName(header)},',
     );
-    buffer.writeln('        transport,');
-    for (final header in _headersForGroupTree(group, ancestors: const [])) {
-      final providerName = _headerProviderFieldName(header);
-      final rootProviderName = _groupHeaderProviderFieldName(group, header);
-      buffer.writeln('        $providerName: $rootProviderName,');
+  }
+  for (final groupPlan in plan.rootGroupPlans) {
+    final propertyName = _groupPropertyName(groupPlan.group);
+    buffer
+      ..writeln(
+        '      $propertyName: ${_groupClientClassName(groupPlan)}._bind(',
+      )
+      ..writeln('        transport,')
+      ..writeln('        $propertyName,');
+    for (final header in plan.rootHeaders) {
+      buffer.writeln(
+        '        ${_headerProviderFieldName(header)}: ${_headerProviderFieldName(header)},',
+      );
     }
     buffer.writeln('      ),');
   }
@@ -260,22 +298,61 @@ String _renderGroupedClient(Spec spec) {
     ..writeln('  }')
     ..writeln()
     ..writeln('  ApiClient._(')
-    ..writeln('    this._transport, {');
-  for (final group in spec.groups) {
-    buffer.writeln('    required this.${_groupPropertyName(group)},');
+    ..write('    this._transport');
+  final hasPrivateNamedArgs =
+      plan.rootHeaders.isNotEmpty || plan.rootGroupPlans.isNotEmpty;
+  if (!hasPrivateNamedArgs) {
+    buffer.writeln(',');
+    buffer.writeln('  });');
+  } else {
+    buffer.writeln(', {');
+    for (final header in plan.rootHeaders) {
+      buffer.writeln(
+        '    required HeaderValueProvider<${_dartType(header.type)}> ${_headerProviderFieldName(header)},',
+      );
+    }
+    for (final groupPlan in plan.rootGroupPlans) {
+      buffer.writeln(
+        '    required this.${_groupPropertyName(groupPlan.group)},',
+      );
+    }
+    if (plan.rootHeaders.isEmpty) {
+      buffer.writeln('  });');
+    } else {
+      buffer.write('  }) : ');
+      for (var i = 0; i < plan.rootHeaders.length; i++) {
+        final header = plan.rootHeaders[i];
+        final suffix = i == plan.rootHeaders.length - 1 ? ';\n' : ',\n       ';
+        buffer.write(
+          '${_headerProviderStorageName(header)} = ${_headerProviderFieldName(header)}$suffix',
+        );
+      }
+    }
   }
   buffer
-    ..writeln('  });')
     ..writeln()
     ..writeln('  final Transport _transport;');
-  for (final group in spec.groups) {
+  for (final header in plan.rootHeaders) {
     buffer.writeln(
-      '  final ${_groupClassName(group)} ${_groupPropertyName(group)};',
+      '  final HeaderValueProvider<${_dartType(header.type)}> ${_headerProviderStorageName(header)};',
+    );
+  }
+  for (final groupPlan in plan.rootGroupPlans) {
+    buffer.writeln(
+      '  final ${_groupClientClassName(groupPlan)} ${_groupPropertyName(groupPlan.group)};',
     );
   }
 
-  final rootMethods = rootEndpoints
-      .map((endpoint) => _renderMethod(endpoint, indent: '  '))
+  final rootMethods = plan.rootEndpoints
+      .map(
+        (endpoint) => _renderEndpointMethod(
+          _EndpointMethodPlan(
+            endpoint: endpoint,
+            groupHeaders: plan.rootHeaders,
+            indent: '  ',
+          ),
+        ),
+      )
       .join('\n');
   if (rootMethods.isNotEmpty) {
     buffer
@@ -287,10 +364,13 @@ String _renderGroupedClient(Spec spec) {
   return buffer.toString();
 }
 
-String _renderGroupFile(GroupSpec group, {required List<GroupSpec> ancestors}) {
-  final constructorHeaders = _headersForGroupTree(group, ancestors: ancestors);
+String _renderGroupFile(_GroupPlan plan) {
+  final group = plan.group;
+  final ancestorHeaders = plan.ancestorHeaders;
+  final ownHeaders = plan.ownHeaders;
+  final constructorHeaders = plan.boundHeaders;
   final buffer = StringBuffer()
-    ..writeln('// ignore_for_file: unused_import')
+    ..writeln('// ignore_for_file: unused_element, unused_field, unused_import')
     ..writeln()
     ..writeln(
       "import 'package:onedef_dart_sdk_core/onedef_dart_sdk_core.dart';",
@@ -299,25 +379,69 @@ String _renderGroupFile(GroupSpec group, {required List<GroupSpec> ancestors}) {
     ..writeln("import '../../providers.dart';")
     ..writeln("import 'models.dart';");
   for (final child in group.groups) {
-    buffer.writeln("import '../${_groupDirectoryName(child)}/client.dart';");
+    buffer.writeln(
+      "import '../${_groupDirectoryNameForSegments(_childPathSegments(plan, child))}/client.dart';",
+    );
   }
 
-  final className = _groupClassName(group);
+  final configClassName = _groupConfigClassName(plan);
+  buffer
+    ..writeln()
+    ..writeln('class $configClassName {');
+  if (ownHeaders.isEmpty && group.groups.isEmpty) {
+    buffer.writeln('  const $configClassName();');
+  } else {
+    buffer..writeln('  const $configClassName({');
+    for (final header in ownHeaders) {
+      buffer.writeln('    required this.${_headerProviderFieldName(header)},');
+    }
+    for (final child in group.groups) {
+      final childPropertyName = _groupPropertyName(child);
+      if (_groupConfigHasRequiredValues(child)) {
+        buffer.writeln('    required this.$childPropertyName,');
+      } else {
+        buffer.writeln(
+          '    this.$childPropertyName = const ${_groupConfigClassNameForSegments(_childPathSegments(plan, child))}(),',
+        );
+      }
+    }
+    buffer.writeln('  });');
+  }
+
+  for (final header in ownHeaders) {
+    buffer.writeln(
+      '  final HeaderValueProvider<${_dartType(header.type)}> ${_headerProviderFieldName(header)};',
+    );
+  }
+  for (final child in group.groups) {
+    buffer.writeln(
+      '  final ${_groupConfigClassNameForSegments(_childPathSegments(plan, child))} ${_groupPropertyName(child)};',
+    );
+  }
+  buffer.writeln('}');
+
+  final className = _groupClientClassName(plan);
   buffer
     ..writeln()
     ..writeln('class $className {');
-  if (constructorHeaders.isEmpty) {
-    buffer.writeln('  $className(this._transport);');
+  if (constructorHeaders.isEmpty && group.groups.isEmpty) {
+    buffer.writeln('  $className._(this._transport);');
   } else {
     buffer
-      ..writeln('  $className(')
+      ..writeln('  $className._(')
       ..writeln('    this._transport, {');
     for (final header in constructorHeaders) {
       buffer.writeln(
         '    required HeaderValueProvider<${_dartType(header.type)}> ${_headerProviderFieldName(header)},',
       );
     }
+    for (final child in group.groups) {
+      buffer.writeln('    required this.${_groupPropertyName(child)},');
+    }
     buffer.write('  }) : ');
+    if (constructorHeaders.isEmpty) {
+      buffer.write('super();\n');
+    }
     for (var i = 0; i < constructorHeaders.length; i++) {
       final header = constructorHeaders[i];
       final suffix = i == constructorHeaders.length - 1 ? ';\n' : ',\n       ';
@@ -329,6 +453,59 @@ String _renderGroupFile(GroupSpec group, {required List<GroupSpec> ancestors}) {
 
   buffer
     ..writeln()
+    ..writeln('  static $className _bind(')
+    ..writeln('    Transport transport,')
+    ..writeln('    $configClassName config,');
+  if (ancestorHeaders.isEmpty) {
+    buffer.writeln('  ) {');
+  } else {
+    buffer.writeln('    {');
+    for (final header in ancestorHeaders) {
+      buffer.writeln(
+        '    required HeaderValueProvider<${_dartType(header.type)}> ${_headerProviderFieldName(header)},',
+      );
+    }
+    buffer.writeln('  }) {');
+  }
+  buffer
+    ..writeln('    return $className._(')
+    ..writeln('      transport,');
+  for (final header in ancestorHeaders) {
+    buffer.writeln(
+      '      ${_headerProviderFieldName(header)}: ${_headerProviderFieldName(header)},',
+    );
+  }
+  for (final header in ownHeaders) {
+    buffer.writeln(
+      '      ${_headerProviderFieldName(header)}: config.${_headerProviderFieldName(header)},',
+    );
+  }
+  for (final child in group.groups) {
+    buffer.writeln(
+      '      ${_groupPropertyName(child)}: ${_groupClientClassNameForSegments(_childPathSegments(plan, child))}._bind(',
+    );
+    buffer
+      ..writeln('        transport,')
+      ..writeln('        config.${_groupPropertyName(child)},');
+    for (final header in _uniqueHeaders([...ancestorHeaders, ...ownHeaders])) {
+      final value =
+          ownHeaders.any(
+            (ownHeader) =>
+                ownHeader.key.trim().toLowerCase() ==
+                header.key.trim().toLowerCase(),
+          )
+          ? 'config.${_headerProviderFieldName(header)}'
+          : _headerProviderFieldName(header);
+      buffer.writeln('        ${_headerProviderFieldName(header)}: $value,');
+    }
+    buffer.writeln('      ),');
+  }
+  buffer
+    ..writeln('    );')
+    ..writeln('  }');
+
+  buffer
+    ..writeln()
     ..writeln('  final Transport _transport;');
   for (final header in constructorHeaders) {
     buffer.writeln(
@@ -337,29 +514,12 @@ String _renderGroupFile(GroupSpec group, {required List<GroupSpec> ancestors}) {
   }
 
   for (final child in group.groups) {
-    buffer
-      ..writeln()
-      ..writeln(
-        '  ${_groupClassName(child)} get ${_groupPropertyName(child)} => ${_groupClassName(child)}(',
-      )
-      ..writeln('        _transport,');
-    for (final header in _headersForGroupTree(
-      child,
-      ancestors: <GroupSpec>[...ancestors, group],
-    )) {
-      buffer.writeln(
-        '        ${_headerProviderFieldName(header)}: ${_headerProviderStorageName(header)},',
-      );
-    }
-    buffer.writeln('      );');
+    buffer..writeln(
+      '  final ${_groupClientClassNameForSegments(_childPathSegments(plan, child))} ${_groupPropertyName(child)};',
+    );
   }
 
-  final methods = group.endpoints
-      .map(
-        (endpoint) =>
-            _renderGroupedMethod(endpoint, group, ancestors, indent: '  '),
-      )
-      .join('\n');
+  final methods = plan.methodPlans.map(_renderEndpointMethod).join('\n');
   if (methods.isNotEmpty) {
     buffer
       ..writeln()
@@ -384,130 +544,10 @@ List<({GroupSpec group, List<GroupSpec> ancestors})> _flattenGroupEntries(
   return result;
 }
 
-String _renderClient(Spec spec, Map<String, List<Endpoint>> groups) {
-  final rootEndpoints = spec.endpoints.where(
-    (endpoint) => endpoint.group.isEmpty,
-  );
-  final hasRootEndpoints = rootEndpoints.isNotEmpty;
-  final buffer = StringBuffer()
-    ..writeln("import 'package:http/http.dart' as http;")
-    ..writeln(
-      "import 'package:onedef_dart_sdk_core/onedef_dart_sdk_core.dart';",
-    )
-    ..writeln("export 'providers.dart';");
-  if (hasRootEndpoints) {
-    buffer.writeln("import 'models.dart';");
-  }
-  for (final group in groups.keys) {
-    buffer.writeln(
-      "import 'groups/${_groupDirectoryNameForName(group)}/client.dart';",
-    );
-  }
-  buffer
-    ..writeln()
-    ..writeln('class ApiClient {')
-    ..writeln(
-      '  factory ApiClient({required String baseUrl, http.Client? client}) {',
-    )
-    ..writeln(
-      '    final transport = Transport(baseUrl: baseUrl, client: client);',
-    )
-    ..writeln('    return ApiClient._(transport);')
-    ..writeln('  }')
-    ..writeln()
-    ..writeln(
-      hasRootEndpoints
-          ? '  ApiClient._(this._transport)'
-          : '  ApiClient._(Transport transport)',
-    );
-
-  if (groups.isNotEmpty) {
-    final entries = groups.entries.toList();
-    for (var i = 0; i < entries.length; i++) {
-      final entry = entries[i];
-      final prefix = i == 0 ? '      :' : '      ,';
-      buffer.writeln(
-        '$prefix ${_camelCase(entry.key)} = ${_pascalCase(entry.key)}Group(${hasRootEndpoints ? '_transport' : 'transport'})',
-      );
-    }
-    buffer.writeln('      ;');
-  } else {
-    buffer.writeln('      ;');
-  }
-
-  buffer.writeln();
-  if (hasRootEndpoints) {
-    buffer.writeln('  final Transport _transport;');
-  }
-  for (final group in groups.keys) {
-    buffer.writeln('  final ${_pascalCase(group)}Group ${_camelCase(group)};');
-  }
-
-  final rootMethods = rootEndpoints
-      .map((endpoint) => _renderMethod(endpoint, indent: '  '))
-      .join('\n');
-  if (rootMethods.isNotEmpty) {
-    buffer
-      ..writeln()
-      ..write(rootMethods);
-  }
-
-  buffer.writeln('}');
-  return buffer.toString();
-}
-
-String _renderGroup(String group, List<Endpoint> endpoints) {
-  final buffer = StringBuffer()
-    ..writeln(
-      "import 'package:onedef_dart_sdk_core/onedef_dart_sdk_core.dart';",
-    )
-    ..writeln("import '../../models.dart';")
-    ..writeln("import 'models.dart';")
-    ..writeln()
-    ..writeln('class ${_pascalCase(group)}Group {')
-    ..writeln('  ${_pascalCase(group)}Group(this._transport);')
-    ..writeln()
-    ..writeln('  final Transport _transport;')
-    ..writeln();
-
-  buffer.write(
-    endpoints
-        .map((endpoint) => _renderMethod(endpoint, indent: '  '))
-        .join('\n'),
-  );
-  buffer.writeln('}');
-  return buffer.toString();
-}
-
-String _renderMethod(Endpoint endpoint, {required String indent}) {
-  return _renderEndpointMethod(
-    endpoint,
-    indent: indent,
-    providerHeaders: const [],
-  );
-}
-
-String _renderGroupedMethod(
-  Endpoint endpoint,
-  GroupSpec group,
-  List<GroupSpec> ancestors, {
-  required String indent,
-}) {
-  return _renderEndpointMethod(
-    endpoint,
-    indent: indent,
-    providerHeaders: <Parameter>[
-      ..._headersFromGroups(ancestors),
-      ..._providerHeadersForGroup(group),
-    ],
-  );
-}
-
-String _renderEndpointMethod(
-  Endpoint endpoint, {
-  required String indent,
-  required List<Parameter> providerHeaders,
-}) {
+String _renderEndpointMethod(_EndpointMethodPlan plan) {
+  final endpoint = plan.endpoint;
+  final indent = plan.indent;
+  final groupHeaders = plan.groupHeaders;
   final buffer = StringBuffer();
   final returnType = endpoint.response.body == null
       ? 'void'
@@ -517,7 +557,7 @@ String _renderEndpointMethod(
   final methodName = _endpointMethodName(endpoint);
   final parameters = <String>[];
 
-  for (final parameter in endpoint.request.pathParams) {
+  for (final parameter in endpoint.request.paths) {
     parameters.add(
       'required ${_dartType(parameter.type)} ${_camelCase(parameter.name)}',
     );
@@ -525,12 +565,12 @@ String _renderEndpointMethod(
   if (endpoint.request.body != null) {
     parameters.add('required ${_dartType(endpoint.request.body!)} body');
   }
-  for (final parameter in endpoint.request.headerParams) {
+  for (final parameter in endpoint.request.headers) {
     parameters.add(
       '${parameter.required ? 'required ' : ''}${_dartType(parameter.type, forceOptional: !parameter.required)} ${_camelCase(parameter.name)}',
     );
   }
-  for (final parameter in endpoint.request.queryParams) {
+  for (final parameter in endpoint.request.queries) {
     parameters.add(
       '${_dartType(parameter.type, forceOptional: true)} ${_camelCase(parameter.name)}',
     );
@@ -547,42 +587,42 @@ String _renderEndpointMethod(
   buffer.writeln();
 
   final hasHeaders =
-      providerHeaders.isNotEmpty || endpoint.request.headerParams.isNotEmpty;
+      groupHeaders.isNotEmpty || endpoint.request.headers.isNotEmpty;
   if (hasHeaders) {
     buffer.writeln('${innerIndent}final headers = <String, String>{};');
-    for (final header in providerHeaders) {
+    for (final header in groupHeaders) {
       buffer.writeln(
-        "${innerIndent}headers['${header.wireName}'] = (await ${_headerProviderStorageName(header)}()).toString();",
+        "${innerIndent}headers['${header.key}'] = (await ${_headerProviderStorageName(header)}()).toString();",
       );
     }
-    for (final parameter in endpoint.request.headerParams) {
+    for (final parameter in endpoint.request.headers) {
       final name = _camelCase(parameter.name);
       if (parameter.required) {
         buffer.writeln(
-          "${innerIndent}headers['${parameter.wireName}'] = $name.toString();",
+          "${innerIndent}headers['${parameter.key}'] = $name.toString();",
         );
       } else {
         buffer.writeln(
-          "${innerIndent}if ($name != null) headers['${parameter.wireName}'] = $name.toString();",
+          "${innerIndent}if ($name != null) headers['${parameter.key}'] = $name.toString();",
         );
       }
     }
     buffer.writeln();
   }
 
-  if (endpoint.request.pathParams.isNotEmpty) {
+  if (endpoint.request.paths.isNotEmpty) {
     buffer.writeln(
-      "${innerIndent}final pathParameters = <String, Object?>{${_pathParameterMap(endpoint.request.pathParams)}};",
+      "${innerIndent}final pathParameters = <String, Object?>{${_pathParameterMap(endpoint.request.paths)}};",
     );
     buffer.writeln();
   }
 
-  if (endpoint.request.queryParams.isNotEmpty) {
+  if (endpoint.request.queries.isNotEmpty) {
     buffer.writeln('${innerIndent}final queryParameters = <String, String>{};');
-    for (final parameter in endpoint.request.queryParams) {
+    for (final parameter in endpoint.request.queries) {
       final name = _camelCase(parameter.name);
       buffer.writeln(
-        "${innerIndent}if ($name != null) queryParameters['${parameter.wireName}'] = $name.toString();",
+        "${innerIndent}if ($name != null) queryParameters['${parameter.key}'] = $name.toString();",
       );
     }
   } else {
@@ -593,8 +633,9 @@ String _renderEndpointMethod(
   buffer.writeln(
     '${innerIndent}return transport.requestResult<$returnType, $errorType>(',
   );
-  buffer
-      .writeln('${innerIndent}  method: ${_httpMethodEnum(endpoint.method)},');
+  buffer.writeln(
+    '${innerIndent}  method: ${_httpMethodEnum(endpoint.method)},',
+  );
   buffer.writeln("${innerIndent}  path: '${_pathTemplate(endpoint.path)}',");
   buffer.writeln('${innerIndent}  expectedStatus: ${endpoint.successStatus},');
   buffer.writeln('${innerIndent}  queryParameters: queryParameters,');
@@ -665,32 +706,31 @@ String _pathParameterMap(List<Parameter> parameters) {
     return '';
   }
   return parameters
-      .map(
-        (parameter) => "'${parameter.wireName}': ${_camelCase(parameter.name)}",
-      )
+      .map((parameter) => "'${parameter.key}': ${_camelCase(parameter.name)}")
       .join(', ');
 }
 
 class _ModelPlan {
   _ModelPlan({
-    required this.typeTable,
-    required this.sharedTypeNames,
-    required this.groupTypeNames,
+    required this.modelTable,
+    required this.sharedModelNames,
+    required this.groupModelNames,
   });
 
-  final Map<String, TypeDef> typeTable;
-  final Set<String> sharedTypeNames;
-  final Map<String, Set<String>> groupTypeNames;
+  final Map<String, ModelDef> modelTable;
+  final Set<String> sharedModelNames;
+  final Map<String, Set<String>> groupModelNames;
 
-  List<TypeDef> get sharedTypes => _typesFor(sharedTypeNames);
+  List<_ModelClassPlan> get sharedModels => _modelsFor(sharedModelNames);
 
-  List<TypeDef> localTypesFor(String group) {
-    return _typesFor(groupTypeNames[group] ?? const <String>{});
+  List<_ModelClassPlan> localModelsFor(String group) {
+    return _modelsFor(groupModelNames[group] ?? const <String>{});
   }
 
-  List<TypeDef> _typesFor(Set<String> names) {
-    return typeTable.values
-        .where((type) => names.contains(type.name))
+  List<_ModelClassPlan> _modelsFor(Set<String> names) {
+    return modelTable.values
+        .where((model) => names.contains(model.name))
+        .map(_ModelClassPlan.new)
         .toList(growable: false);
   }
 }
@@ -701,44 +741,46 @@ _ModelPlan _planModels(
   required List<Endpoint> rootEndpoints,
 }) {
   const rootScope = '<root>';
-  final typeTable = {for (final type in spec.types) type.name: type};
+  final modelTable = {for (final model in spec.models) model.name: model};
   final usage = <String, Set<String>>{};
-  final groupTypeNames = <String, Set<String>>{
+  final groupModelNames = <String, Set<String>>{
     for (final group in groupEndpoints.keys) group: <String>{},
   };
 
   void mark(String name, String scope) {
     usage.putIfAbsent(name, () => <String>{}).add(scope);
     if (scope != rootScope) {
-      groupTypeNames.putIfAbsent(scope, () => <String>{}).add(name);
+      groupModelNames.putIfAbsent(scope, () => <String>{}).add(name);
     }
   }
 
-  void collectType(TypeRef? type, String scope, Set<String> visiting) {
+  void collectType(TypeUsage? type, String scope, Set<String> visiting) {
     if (type == null) {
       return;
     }
     switch (type.kind) {
-      case 'named':
+      case TypeUsageKind.named:
         final name = type.name;
-        final typeDef = typeTable[name];
-        if (typeDef == null) {
+        final modelDef = modelTable[name];
+        if (modelDef == null) {
           return;
         }
         mark(name, scope);
         if (!visiting.add(name)) {
           return;
         }
-        for (final field in typeDef.fields) {
+        for (final field in modelDef.fields) {
           collectType(field.type, scope, visiting);
         }
         visiting.remove(name);
         break;
-      case 'list':
+      case TypeUsageKind.list:
         collectType(type.elem, scope, visiting);
         break;
-      case 'map':
+      case TypeUsageKind.map:
         collectType(type.value, scope, visiting);
+        break;
+      default:
         break;
     }
   }
@@ -759,27 +801,27 @@ _ModelPlan _planModels(
     }
   }
 
-  final sharedTypeNames = <String>{};
-  for (final type in spec.types) {
-    final scopes = usage[type.name] ?? const <String>{};
+  final sharedModelNames = <String>{};
+  for (final model in spec.models) {
+    final scopes = usage[model.name] ?? const <String>{};
     if (scopes.isEmpty || scopes.contains(rootScope) || scopes.length > 1) {
-      sharedTypeNames.add(type.name);
+      sharedModelNames.add(model.name);
     }
   }
 
-  for (final entry in groupTypeNames.entries) {
-    entry.value.removeAll(sharedTypeNames);
+  for (final entry in groupModelNames.entries) {
+    entry.value.removeAll(sharedModelNames);
   }
 
   return _ModelPlan(
-    typeTable: typeTable,
-    sharedTypeNames: sharedTypeNames,
-    groupTypeNames: groupTypeNames,
+    modelTable: modelTable,
+    sharedModelNames: sharedModelNames,
+    groupModelNames: groupModelNames,
   );
 }
 
 String _renderModels(
-  List<TypeDef> types, {
+  List<_ModelClassPlan> modelPlans, {
   bool importSharedModels = false,
 }) {
   final buffer = StringBuffer()
@@ -793,11 +835,12 @@ String _renderModels(
   }
   buffer.writeln();
 
-  for (final typeDef in types) {
+  for (final modelPlan in modelPlans) {
+    final modelDef = modelPlan.model;
     buffer
-      ..writeln('class ${typeDef.name} {')
-      ..writeln('  const ${typeDef.name}({');
-    for (final field in typeDef.fields) {
+      ..writeln('class ${modelDef.name} {')
+      ..writeln('  const ${modelDef.name}({');
+    for (final field in modelDef.fields) {
       final prefix = field.required ? '    required this.' : '    this.';
       buffer.writeln('$prefix${_camelCase(field.name)},');
     }
@@ -805,7 +848,7 @@ String _renderModels(
       ..writeln('  });')
       ..writeln();
 
-    for (final field in typeDef.fields) {
+    for (final field in modelDef.fields) {
       buffer.writeln(
         '  final ${_dartType(field.type)} ${_camelCase(field.name)};',
       );
@@ -814,28 +857,28 @@ String _renderModels(
     buffer
       ..writeln()
       ..writeln(
-        '  factory ${typeDef.name}.fromJson(Map<String, dynamic> json) => ${typeDef.name}(',
+        '  factory ${modelDef.name}.fromJson(Map<String, dynamic> json) => ${modelDef.name}(',
       );
-    for (final field in typeDef.fields) {
+    for (final field in modelDef.fields) {
       final fieldName = _camelCase(field.name);
       buffer.writeln(
-        "    $fieldName: ${_decodeModelValue(field.type, "json['${field.wireName}']", "${typeDef.name}.${field.wireName}")},",
+        "    $fieldName: ${_decodeModelValue(field.type, "json['${field.key}']", "${modelDef.name}.${field.key}")},",
       );
     }
     buffer
       ..writeln('  );')
       ..writeln()
       ..writeln('  Map<String, dynamic> toJson() => {');
-    for (final field in typeDef.fields) {
+    for (final field in modelDef.fields) {
       final fieldName = _camelCase(field.name);
       if (field.omitEmpty && field.type.nullable) {
         final nonNullable = _nonNullableType(field.type);
         buffer.writeln(
-          "    if ($fieldName != null) '${field.wireName}': ${_encodeModelValue(nonNullable, fieldName)},",
+          "    if ($fieldName != null) '${field.key}': ${_encodeModelValue(nonNullable, fieldName)},",
         );
       } else {
         buffer.writeln(
-          "    '${field.wireName}': ${_encodeModelValue(field.type, fieldName)},",
+          "    '${field.key}': ${_encodeModelValue(field.type, fieldName)},",
         );
       }
     }
@@ -848,38 +891,36 @@ String _renderModels(
   return buffer.toString();
 }
 
-TypeRef _nonNullableType(TypeRef type) => TypeRef(
-      kind: type.kind,
-      name: type.name,
-      nullable: false,
-      elem: type.elem,
-      key: type.key,
-      value: type.value,
-    );
+TypeUsage _nonNullableType(TypeUsage type) => TypeUsage(
+  kind: type.kind,
+  name: type.name,
+  nullable: false,
+  elem: type.elem,
+  key: type.key,
+  value: type.value,
+);
 
-String _dartType(TypeRef type, {bool forceOptional = false}) {
+String _dartType(TypeUsage type, {bool forceOptional = false}) {
   final nullable = forceOptional || type.nullable;
   String base;
   switch (type.kind) {
-    case 'bool':
+    case TypeUsageKind.bool:
       base = 'bool';
-    case 'int':
+    case TypeUsageKind.int:
       base = 'int';
-    case 'float':
+    case TypeUsageKind.float:
       base = 'double';
-    case 'string':
-    case 'uuid':
+    case TypeUsageKind.string:
+    case TypeUsageKind.uuid:
       base = 'String';
-    case 'any':
+    case TypeUsageKind.any:
       base = 'Object?';
-    case 'named':
+    case TypeUsageKind.named:
       base = type.name;
-    case 'list':
+    case TypeUsageKind.list:
       base = 'List<${_dartType(type.elem!)}>';
-    case 'map':
-      base = 'Map<String, dynamic>';
-    default:
-      base = 'Object?';
+    case TypeUsageKind.map:
+      base = 'Map<String, ${_dartType(type.value!)}>';
   }
 
   if (base.endsWith('?') || !nullable) {
@@ -888,9 +929,9 @@ String _dartType(TypeRef type, {bool forceOptional = false}) {
   return '$base?';
 }
 
-String _decodeModelValue(TypeRef type, String expr, String context) {
+String _decodeModelValue(TypeUsage type, String expr, String context) {
   if (type.nullable) {
-    final nonNullable = TypeRef(
+    final nonNullable = TypeUsage(
       kind: type.kind,
       name: type.name,
       nullable: false,
@@ -902,31 +943,29 @@ String _decodeModelValue(TypeRef type, String expr, String context) {
   }
 
   switch (type.kind) {
-    case 'bool':
+    case TypeUsageKind.bool:
       return '$expr as bool';
-    case 'int':
+    case TypeUsageKind.int:
       return '$expr as int';
-    case 'float':
+    case TypeUsageKind.float:
       return '($expr as num).toDouble()';
-    case 'string':
-    case 'uuid':
+    case TypeUsageKind.string:
+    case TypeUsageKind.uuid:
       return '$expr as String';
-    case 'any':
+    case TypeUsageKind.any:
       return expr;
-    case 'named':
+    case TypeUsageKind.named:
       return '${type.name}.fromJson(expectJsonObject($expr, \'$context\'))';
-    case 'list':
+    case TypeUsageKind.list:
       return '(expectJsonList($expr, \'$context\')).map((element) => ${_decodeCollectionItem(type.elem!, 'element', context)}).toList()';
-    case 'map':
-      return 'Map<String, dynamic>.from(expectJsonObject($expr, \'$context\'))';
-    default:
-      return expr;
+    case TypeUsageKind.map:
+      return "expectJsonObject($expr, '$context').map((key, value) => MapEntry(key, ${_decodeCollectionItem(type.value!, 'value', context)}))";
   }
 }
 
-String _decodeCollectionItem(TypeRef type, String expr, String context) {
+String _decodeCollectionItem(TypeUsage type, String expr, String context) {
   if (type.nullable) {
-    final nonNullable = TypeRef(
+    final nonNullable = TypeUsage(
       kind: type.kind,
       name: type.name,
       nullable: false,
@@ -938,31 +977,29 @@ String _decodeCollectionItem(TypeRef type, String expr, String context) {
   }
 
   switch (type.kind) {
-    case 'bool':
+    case TypeUsageKind.bool:
       return '$expr as bool';
-    case 'int':
+    case TypeUsageKind.int:
       return '$expr as int';
-    case 'float':
+    case TypeUsageKind.float:
       return '($expr as num).toDouble()';
-    case 'string':
-    case 'uuid':
+    case TypeUsageKind.string:
+    case TypeUsageKind.uuid:
       return '$expr as String';
-    case 'any':
+    case TypeUsageKind.any:
       return expr;
-    case 'named':
+    case TypeUsageKind.named:
       return '${type.name}.fromJson(expectJsonObject($expr, \'$context\'))';
-    case 'list':
+    case TypeUsageKind.list:
       return '(expectJsonList($expr, \'$context\')).map((nested) => ${_decodeCollectionItem(type.elem!, 'nested', context)}).toList()';
-    case 'map':
-      return 'Map<String, dynamic>.from(expectJsonObject($expr, \'$context\'))';
-    default:
-      return expr;
+    case TypeUsageKind.map:
+      return "expectJsonObject($expr, '$context').map((key, value) => MapEntry(key, ${_decodeCollectionItem(type.value!, 'value', context)}))";
   }
 }
 
-String _encodeModelValue(TypeRef type, String expr) {
+String _encodeModelValue(TypeUsage type, String expr) {
   if (type.nullable) {
-    final nonNullable = TypeRef(
+    final nonNullable = TypeUsage(
       kind: type.kind,
       name: type.name,
       nullable: false,
@@ -974,18 +1011,20 @@ String _encodeModelValue(TypeRef type, String expr) {
   }
 
   switch (type.kind) {
-    case 'named':
+    case TypeUsageKind.named:
       return '$expr.toJson()';
-    case 'list':
+    case TypeUsageKind.list:
       return '$expr.map((item) => ${_encodeCollectionItem(type.elem!, 'item')}).toList()';
+    case TypeUsageKind.map:
+      return '$expr.map((key, value) => MapEntry(key, ${_encodeCollectionItem(type.value!, 'value')}))';
     default:
       return expr;
   }
 }
 
-String _encodeCollectionItem(TypeRef type, String expr) {
+String _encodeCollectionItem(TypeUsage type, String expr) {
   if (type.nullable) {
-    final nonNullable = TypeRef(
+    final nonNullable = TypeUsage(
       kind: type.kind,
       name: type.name,
       nullable: false,
@@ -997,24 +1036,26 @@ String _encodeCollectionItem(TypeRef type, String expr) {
   }
 
   switch (type.kind) {
-    case 'named':
+    case TypeUsageKind.named:
       return '$expr.toJson()';
-    case 'list':
+    case TypeUsageKind.list:
       return '$expr.map((nested) => ${_encodeCollectionItem(type.elem!, 'nested')}).toList()';
+    case TypeUsageKind.map:
+      return '$expr.map((key, value) => MapEntry(key, ${_encodeCollectionItem(type.value!, 'value')}))';
     default:
       return expr;
   }
 }
 
 String _decodeResponseValue(
-  TypeRef type,
+  TypeUsage type,
   String expr,
   String statusExpr,
   String rawBodyExpr, {
   String transportExpr = '_transport',
 }) {
   if (type.nullable) {
-    final nonNullable = TypeRef(
+    final nonNullable = TypeUsage(
       kind: type.kind,
       name: type.name,
       nullable: false,
@@ -1026,37 +1067,35 @@ String _decodeResponseValue(
   }
 
   switch (type.kind) {
-    case 'bool':
+    case TypeUsageKind.bool:
       return "$transportExpr.expectBool($expr, $statusExpr, $rawBodyExpr, 'Expected response data to be a boolean.')";
-    case 'int':
+    case TypeUsageKind.int:
       return "$transportExpr.expectInt($expr, $statusExpr, $rawBodyExpr, 'Expected response data to be an integer.')";
-    case 'float':
+    case TypeUsageKind.float:
       return "$transportExpr.expectDouble($expr, $statusExpr, $rawBodyExpr, 'Expected response data to be a number.')";
-    case 'string':
-    case 'uuid':
+    case TypeUsageKind.string:
+    case TypeUsageKind.uuid:
       return "$transportExpr.expectString($expr, $statusExpr, $rawBodyExpr, 'Expected response data to be a string.')";
-    case 'any':
+    case TypeUsageKind.any:
       return expr;
-    case 'named':
+    case TypeUsageKind.named:
       return '${type.name}.fromJson($transportExpr.expectJsonObject($expr, $statusExpr, $rawBodyExpr, \'Expected response data to be a JSON object.\'))';
-    case 'list':
+    case TypeUsageKind.list:
       return "($transportExpr.expectJsonList($expr, $statusExpr, $rawBodyExpr, 'Expected response data to be a JSON array.')).map((element) => ${_decodeResponseListItem(type.elem!, 'element', statusExpr, rawBodyExpr, transportExpr: transportExpr)}).toList()";
-    case 'map':
-      return "$transportExpr.expectJsonObject($expr, $statusExpr, $rawBodyExpr, 'Expected response data to be a JSON object.')";
-    default:
-      return expr;
+    case TypeUsageKind.map:
+      return "$transportExpr.expectJsonObject($expr, $statusExpr, $rawBodyExpr, 'Expected response data to be a JSON object.').map((key, value) => MapEntry(key, ${_decodeResponseListItem(type.value!, 'value', statusExpr, rawBodyExpr, transportExpr: transportExpr)}))";
   }
 }
 
 String _decodeResponseListItem(
-  TypeRef type,
+  TypeUsage type,
   String expr,
   String statusExpr,
   String rawBodyExpr, {
   String transportExpr = '_transport',
 }) {
   if (type.nullable) {
-    final nonNullable = TypeRef(
+    final nonNullable = TypeUsage(
       kind: type.kind,
       name: type.name,
       nullable: false,
@@ -1068,31 +1107,29 @@ String _decodeResponseListItem(
   }
 
   switch (type.kind) {
-    case 'bool':
+    case TypeUsageKind.bool:
       return "$transportExpr.expectBool($expr, $statusExpr, $rawBodyExpr, 'Expected response item to be a boolean.')";
-    case 'int':
+    case TypeUsageKind.int:
       return "$transportExpr.expectInt($expr, $statusExpr, $rawBodyExpr, 'Expected response item to be an integer.')";
-    case 'float':
+    case TypeUsageKind.float:
       return "$transportExpr.expectDouble($expr, $statusExpr, $rawBodyExpr, 'Expected response item to be a number.')";
-    case 'string':
-    case 'uuid':
+    case TypeUsageKind.string:
+    case TypeUsageKind.uuid:
       return "$transportExpr.expectString($expr, $statusExpr, $rawBodyExpr, 'Expected response item to be a string.')";
-    case 'any':
+    case TypeUsageKind.any:
       return expr;
-    case 'named':
+    case TypeUsageKind.named:
       return '${type.name}.fromJson($transportExpr.expectJsonObject($expr, $statusExpr, $rawBodyExpr, \'Expected response item to be a JSON object.\'))';
-    case 'list':
+    case TypeUsageKind.list:
       return "($transportExpr.expectJsonList($expr, $statusExpr, $rawBodyExpr, 'Expected response item to be a JSON array.')).map((nested) => ${_decodeResponseListItem(type.elem!, 'nested', statusExpr, rawBodyExpr, transportExpr: transportExpr)}).toList()";
-    case 'map':
-      return "$transportExpr.expectJsonObject($expr, $statusExpr, $rawBodyExpr, 'Expected response item to be a JSON object.')";
-    default:
-      return expr;
+    case TypeUsageKind.map:
+      return "$transportExpr.expectJsonObject($expr, $statusExpr, $rawBodyExpr, 'Expected response item to be a JSON object.').map((key, value) => MapEntry(key, ${_decodeResponseListItem(type.value!, 'value', statusExpr, rawBodyExpr, transportExpr: transportExpr)}))";
   }
 }
 
-String _bodyToJson(TypeRef type, String expr) {
+String _bodyToJson(TypeUsage type, String expr) {
   if (type.nullable) {
-    final nonNullable = TypeRef(
+    final nonNullable = TypeUsage(
       kind: type.kind,
       name: type.name,
       nullable: false,
@@ -1104,18 +1141,20 @@ String _bodyToJson(TypeRef type, String expr) {
   }
 
   switch (type.kind) {
-    case 'named':
+    case TypeUsageKind.named:
       return '$expr.toJson()';
-    case 'list':
+    case TypeUsageKind.list:
       return '$expr.map((item) => ${_bodyCollectionItem(type.elem!, 'item')}).toList()';
+    case TypeUsageKind.map:
+      return '$expr.map((key, value) => MapEntry(key, ${_bodyCollectionItem(type.value!, 'value')}))';
     default:
       return expr;
   }
 }
 
-String _bodyCollectionItem(TypeRef type, String expr) {
+String _bodyCollectionItem(TypeUsage type, String expr) {
   if (type.nullable) {
-    final nonNullable = TypeRef(
+    final nonNullable = TypeUsage(
       kind: type.kind,
       name: type.name,
       nullable: false,
@@ -1127,10 +1166,12 @@ String _bodyCollectionItem(TypeRef type, String expr) {
   }
 
   switch (type.kind) {
-    case 'named':
+    case TypeUsageKind.named:
       return '$expr.toJson()';
-    case 'list':
+    case TypeUsageKind.list:
       return '$expr.map((nested) => ${_bodyCollectionItem(type.elem!, 'nested')}).toList()';
+    case TypeUsageKind.map:
+      return '$expr.map((key, value) => MapEntry(key, ${_bodyCollectionItem(type.value!, 'value')}))';
     default:
       return expr;
   }
@@ -1153,7 +1194,7 @@ var _identifierNaming = _IdentifierNaming();
 
 class _IdentifierNaming {
   _IdentifierNaming([Iterable<String> initialisms = const []])
-      : initialisms = _normalizeInitialisms(initialisms);
+    : initialisms = _normalizeInitialisms(initialisms);
 
   final List<String> initialisms;
 
@@ -1243,8 +1284,8 @@ class _IdentifierNaming {
   }
 
   bool isInitialism(String value) => initialisms.any(
-        (initialism) => initialism.toUpperCase() == value.toUpperCase(),
-      );
+    (initialism) => initialism.toUpperCase() == value.toUpperCase(),
+  );
 }
 
 String _camelCase(String value) => _identifierNaming.camelCase(value);
@@ -1357,20 +1398,30 @@ String _sanitizeIdentifierSegment(String value) {
   return value.replaceAll('-', '_');
 }
 
-String _groupUniqueName(GroupSpec group) {
-  return _packageNameForPathSegments(group.pathSegments);
+String _groupUniqueName(_GroupPlan plan) {
+  return _groupDirectoryNameForSegments(plan.pathSegments);
 }
 
-String _groupDirectoryName(GroupSpec group) => _groupUniqueName(group);
+String _groupDirectoryName(_GroupPlan plan) => _groupUniqueName(plan);
 
-String _groupDirectoryNameForName(String name) =>
-    _sanitizeIdentifierSegment(name);
+String _groupConfigClassName(_GroupPlan plan) =>
+    '${_pascalCase(_groupUniqueName(plan))}Group';
 
-String _groupClassName(GroupSpec group) {
-  return '${_pascalCase(_groupUniqueName(group))}Group';
-}
+String _groupClientClassName(_GroupPlan plan) =>
+    '${_pascalCase(_groupUniqueName(plan))}GroupClient';
 
-String _packageNameForPathSegments(Iterable<String> pathSegments) {
+String _groupConfigClassNameForSegments(Iterable<String> pathSegments) =>
+    '${_pascalCase(_groupDirectoryNameForSegments(pathSegments))}Group';
+
+String _groupClientClassNameForSegments(Iterable<String> pathSegments) =>
+    '${_pascalCase(_groupDirectoryNameForSegments(pathSegments))}GroupClient';
+
+List<String> _childPathSegments(_GroupPlan plan, GroupSpec child) => [
+  ...plan.pathSegments,
+  child.name,
+];
+
+String _groupDirectoryNameForSegments(Iterable<String> pathSegments) {
   final segments = pathSegments.map(_sanitizeIdentifierSegment).toList();
   final name = segments.last;
   if (segments.length == 1) {
@@ -1391,66 +1442,46 @@ String _groupPropertyName(GroupSpec group) {
   return _camelCase(_sanitizeIdentifierSegment(group.name));
 }
 
-String _headerProviderFieldName(Parameter header) {
-  return _camelCase(_sanitizeIdentifierSegment(header.name));
+String _headerProviderFieldName(HeaderSpec header) {
+  return _camelCase(_identifierNameFromKey(header.key));
 }
 
-String _groupHeaderProviderFieldName(GroupSpec group, Parameter header) {
-  return '${_groupPropertyName(group)}${_pascalCase(_headerProviderFieldName(header))}';
-}
-
-String _headerProviderStorageName(Parameter header) {
+String _headerProviderStorageName(HeaderSpec header) {
   return '_${_headerProviderFieldName(header)}';
 }
 
-List<Parameter> _headersFromGroups(List<GroupSpec> groups) {
-  return _uniqueHeaders(
-    groups.expand(_providerHeadersForGroup).toList(),
-  );
+List<HeaderSpec> _headersFromGroups(List<GroupSpec> groups) {
+  return _uniqueHeaders(groups.expand(_groupHeadersForGroup).toList());
 }
 
-List<Parameter> _headersForGroupTree(
-  GroupSpec group, {
-  required List<GroupSpec> ancestors,
-}) {
-  final headers = <Parameter>[
-    ..._headersFromGroups(ancestors),
-    ..._providerHeadersForGroup(group),
-  ];
-  for (final child in group.groups) {
-    headers.addAll(
-      _headersForGroupTree(child, ancestors: <GroupSpec>[...ancestors, group]),
-    );
-  }
-  return _uniqueHeaders(headers);
-}
+List<HeaderSpec> _groupHeadersForGroup(GroupSpec group) => group.headers;
 
-List<Parameter> _providerHeadersForGroup(GroupSpec group) {
-  if (group.providerHeaders.isNotEmpty) {
-    return group.providerHeaders;
-  }
-  return group.requiredHeaders.map(_stringProviderHeader).toList();
-}
-
-Parameter _stringProviderHeader(String wireName) {
-  return Parameter(
-    name:
-        _pascalCase(_sanitizeIdentifierSegment(wireName.replaceAll('-', '_'))),
-    wireName: wireName,
-    type: const TypeRef(kind: 'string'),
-    required: true,
-    description: '',
-    examples: const [],
-  );
-}
-
-List<Parameter> _uniqueHeaders(List<Parameter> values) {
+List<HeaderSpec> _uniqueHeaders(List<HeaderSpec> values) {
   final seen = <String>{};
-  final result = <Parameter>[];
+  final result = <HeaderSpec>[];
   for (final value in values) {
-    if (seen.add(value.wireName.trim().toLowerCase())) {
+    if (seen.add(value.key.trim().toLowerCase())) {
       result.add(value);
     }
   }
   return result;
+}
+
+bool _groupConfigHasRequiredValues(GroupSpec group) {
+  return group.headers.isNotEmpty ||
+      group.groups.any(_groupConfigHasRequiredValues);
+}
+
+String _renderGroupConfigParameter(_GroupPlan plan, {required String indent}) {
+  final type = _groupConfigClassName(plan);
+  final name = _groupPropertyName(plan.group);
+  if (_groupConfigHasRequiredValues(plan.group)) {
+    return '${indent}required $type $name,';
+  }
+  return '${indent}$type $name = const $type(),';
+}
+
+String _identifierNameFromKey(String key) {
+  final normalized = key.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_');
+  return normalized.replaceAll(RegExp(r'^_+|_+$'), '');
 }

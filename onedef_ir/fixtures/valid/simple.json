@@ -1,51 +1,54 @@
 {
   "version": "v1",
-  "naming": {
-    "initialisms": ["ID"]
-  },
-  "endpoints": [
-    {
-      "name": "GetUser",
-      "method": "GET",
-      "path": "/users/{id}",
-      "successStatus": 200,
-      "request": {
-        "pathParams": [
-          {
-            "name": "ID",
-            "wireName": "id",
-            "type": { "kind": "uuid" },
-            "required": true
-          }
-        ]
-      },
-      "response": {
-        "envelope": true,
-        "body": { "kind": "named", "name": "User" }
-      },
-      "error": {
-        "body": { "kind": "named", "name": "DefaultError" }
-      }
-    }
+  "initialisms": [
+    "ID"
   ],
-  "types": [
+  "models": [
     {
       "name": "User",
       "kind": "object",
       "fields": [
         {
           "name": "ID",
-          "wireName": "id",
-          "type": { "kind": "uuid" },
+          "key": "id",
+          "type": "uuid",
           "required": true
         },
         {
           "name": "Name",
-          "wireName": "name",
-          "type": { "kind": "string" },
+          "key": "name",
+          "type": "string",
           "required": true
         }
       ]
     }
-  ]
+  ],
+  "routes": {
+    "headers": [],
+    "endpoints": [
+      {
+        "name": "GetUser",
+        "method": "GET",
+        "path": "/users/{id}",
+        "successStatus": 200,
+        "request": {
+          "paths": [
+            {
+              "name": "ID",
+              "key": "id",
+              "type": "uuid"
+            }
+          ]
+        },
+        "response": {
+          "envelope": true,
+          "body": "User"
+        },
+        "error": {
+          "body": "DefaultError"
+        }
+      }
+    ],
+    "groups": []
+  }
 }

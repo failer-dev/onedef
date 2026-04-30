@@ -1,74 +1,14 @@
 {
   "version": "v1",
-  "endpoints": [
-    {
-      "name": "CreateUser",
-      "method": "POST",
-      "path": "/users",
-      "successStatus": 201,
-      "group": "user",
-      "request": {
-        "body": {
-          "kind": "named",
-          "name": "CreateUserRequest"
-        }
-      },
-      "response": {
-        "envelope": true,
-        "body": {
-          "kind": "named",
-          "name": "User"
-        }
-      }
-    },
-    {
-      "name": "DeleteUser",
-      "method": "DELETE",
-      "path": "/users/{id}",
-      "successStatus": 204,
-      "group": "user",
-      "request": {
-        "pathParams": [
-          {
-            "name": "ID",
-            "wireName": "id",
-            "type": {
-              "kind": "string"
-            },
-            "required": true
-          }
-        ]
-      },
-      "response": {
-        "envelope": false
-      }
-    },
-    {
-      "name": "Health",
-      "method": "GET",
-      "path": "/health",
-      "successStatus": 200,
-      "request": {},
-      "response": {
-        "envelope": true,
-        "body": {
-          "kind": "named",
-          "name": "HealthStatus"
-        }
-      }
-    }
-  ],
-  "types": [
+  "models": [
     {
       "name": "CreateUserRequest",
       "kind": "object",
       "fields": [
         {
           "name": "Name",
-          "wireName": "name",
-          "type": {
-            "kind": "string"
-          },
+          "key": "name",
+          "type": "string",
           "required": true
         }
       ]
@@ -79,18 +19,14 @@
       "fields": [
         {
           "name": "ID",
-          "wireName": "id",
-          "type": {
-            "kind": "string"
-          },
+          "key": "id",
+          "type": "string",
           "required": true
         },
         {
           "name": "Name",
-          "wireName": "name",
-          "type": {
-            "kind": "string"
-          },
+          "key": "name",
+          "type": "string",
           "required": true
         }
       ]
@@ -101,13 +37,67 @@
       "fields": [
         {
           "name": "Status",
-          "wireName": "status",
-          "type": {
-            "kind": "string"
-          },
+          "key": "status",
+          "type": "string",
           "required": true
         }
       ]
     }
-  ]
+  ],
+  "routes": {
+    "headers": [],
+    "endpoints": [
+      {
+        "name": "Health",
+        "method": "GET",
+        "path": "/health",
+        "successStatus": 200,
+        "request": {},
+        "response": {
+          "envelope": true,
+          "body": "HealthStatus"
+        }
+      }
+    ],
+    "groups": [
+      {
+        "name": "user",
+        "headers": [],
+        "endpoints": [
+          {
+            "name": "CreateUser",
+            "method": "POST",
+            "path": "/users",
+            "successStatus": 201,
+            "request": {
+              "body": "CreateUserRequest"
+            },
+            "response": {
+              "envelope": true,
+              "body": "User"
+            }
+          },
+          {
+            "name": "DeleteUser",
+            "method": "DELETE",
+            "path": "/users/{id}",
+            "successStatus": 204,
+            "request": {
+              "paths": [
+                {
+                  "name": "ID",
+                  "key": "id",
+                  "type": "string"
+                }
+              ]
+            },
+            "response": {
+              "envelope": false
+            }
+          }
+        ],
+        "groups": []
+      }
+    ]
+  }
 }

@@ -121,15 +121,25 @@ func TestSpecGenerateIRJSONCompilesExternally(t *testing.T) {
 		t.Fatalf("GenerateIRJSON() error = %v", err)
 	}
 	var spec struct {
-		Naming *struct {
-			Initialisms []string `json:"initialisms"`
-		} `json:"naming"`
+		Initialisms []string        `json:"initialisms"`
+		Models      json.RawMessage `json:"models"`
+		Naming      json.RawMessage `json:"naming"`
+		Types       json.RawMessage `json:"types"`
 	}
 	if err := json.Unmarshal(specJSON, &spec); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
-	if spec.Naming == nil || strings.Join(spec.Naming.Initialisms, ",") != "ID" {
-		t.Fatalf("Naming = %#v, want ID", spec.Naming)
+	if strings.Join(spec.Initialisms, ",") != "ID" {
+		t.Fatalf("Initialisms = %#v, want ID", spec.Initialisms)
+	}
+	if spec.Models == nil {
+		t.Fatal("Models = nil, want emitted")
+	}
+	if spec.Naming != nil {
+		t.Fatalf("Naming = %s, want omitted", spec.Naming)
+	}
+	if spec.Types != nil {
+		t.Fatalf("Types = %s, want omitted", spec.Types)
 	}
 }
 

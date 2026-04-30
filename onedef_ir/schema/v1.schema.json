@@ -3,34 +3,37 @@
   "$id": "https://onedef.dev/ir/schema/v1.schema.json",
   "title": "onedef IR v1",
   "type": "object",
-  "required": ["version", "types"],
+  "required": ["version", "routes", "models"],
   "properties": {
     "version": {
       "const": "v1"
     },
-    "naming": {
-      "$ref": "#/$defs/naming"
+    "initialisms": {
+      "$ref": "#/$defs/stringArray"
     },
-    "groups": {
-      "$ref": "#/$defs/groupArray"
+    "routes": {
+      "$ref": "#/$defs/routes"
     },
-    "endpoints": {
-      "$ref": "#/$defs/endpointArray"
-    },
-    "types": {
-      "$ref": "#/$defs/typeDefArray"
+    "models": {
+      "$ref": "#/$defs/modelDefArray"
     }
   },
-  "additionalProperties": true,
+  "additionalProperties": false,
   "$defs": {
-    "naming": {
-      "type": ["object", "null"],
+    "routes": {
+      "type": "object",
       "properties": {
-        "initialisms": {
-          "$ref": "#/$defs/stringArray"
+        "headers": {
+          "$ref": "#/$defs/headerArray"
+        },
+        "endpoints": {
+          "$ref": "#/$defs/endpointArray"
+        },
+        "groups": {
+          "$ref": "#/$defs/groupArray"
         }
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
     "groupArray": {
       "type": ["array", "null"],
@@ -42,21 +45,12 @@
       "type": "object",
       "required": ["name"],
       "properties": {
-        "id": {
-          "type": "string"
-        },
         "name": {
           "type": "string",
           "minLength": 1
         },
-        "pathSegments": {
-          "$ref": "#/$defs/stringArray"
-        },
-        "requiredHeaders": {
-          "$ref": "#/$defs/stringArray"
-        },
-        "providerHeaders": {
-          "$ref": "#/$defs/parameterArray"
+        "headers": {
+          "$ref": "#/$defs/headerArray"
         },
         "endpoints": {
           "$ref": "#/$defs/endpointArray"
@@ -65,7 +59,7 @@
           "$ref": "#/$defs/groupArray"
         }
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
     "endpointArray": {
       "type": ["array", "null"],
@@ -103,12 +97,6 @@
           "minimum": 200,
           "maximum": 299
         },
-        "group": {
-          "type": "string"
-        },
-        "requiredHeaders": {
-          "$ref": "#/$defs/stringArray"
-        },
         "request": {
           "$ref": "#/$defs/request"
         },
@@ -119,25 +107,25 @@
           "$ref": "#/$defs/error"
         }
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
     "request": {
       "type": "object",
       "properties": {
-        "pathParams": {
+        "paths": {
           "$ref": "#/$defs/parameterArray"
         },
-        "queryParams": {
+        "queries": {
           "$ref": "#/$defs/parameterArray"
         },
-        "headerParams": {
-          "$ref": "#/$defs/parameterArray"
+        "headers": {
+          "$ref": "#/$defs/headerParameterArray"
         },
         "body": {
           "$ref": "#/$defs/typeRef"
         }
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
     "parameterArray": {
       "type": ["array", "null"],
@@ -147,13 +135,43 @@
     },
     "parameter": {
       "type": "object",
-      "required": ["name", "wireName", "type", "required"],
+      "required": ["name", "key", "type"],
       "properties": {
         "name": {
           "type": "string",
           "minLength": 1
         },
-        "wireName": {
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/typeRef"
+        },
+        "description": {
+          "type": "string"
+        },
+        "examples": {
+          "$ref": "#/$defs/stringArray"
+        }
+      },
+      "additionalProperties": false
+    },
+    "headerParameterArray": {
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/$defs/headerParameter"
+      }
+    },
+    "headerParameter": {
+      "type": "object",
+      "required": ["name", "key", "type", "required"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "key": {
           "type": "string",
           "minLength": 1
         },
@@ -170,7 +188,33 @@
           "$ref": "#/$defs/stringArray"
         }
       },
-      "additionalProperties": true
+      "additionalProperties": false
+    },
+    "headerArray": {
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/$defs/header"
+      }
+    },
+    "header": {
+      "type": "object",
+      "required": ["key", "type"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/typeRef"
+        },
+        "description": {
+          "type": "string"
+        },
+        "examples": {
+          "$ref": "#/$defs/stringArray"
+        }
+      },
+      "additionalProperties": false
     },
     "response": {
       "type": "object",
@@ -183,7 +227,7 @@
           "$ref": "#/$defs/typeRef"
         }
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
     "error": {
       "type": "object",
@@ -193,15 +237,15 @@
           "$ref": "#/$defs/typeRef"
         }
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
-    "typeDefArray": {
+    "modelDefArray": {
       "type": ["array", "null"],
       "items": {
-        "$ref": "#/$defs/typeDef"
+        "$ref": "#/$defs/modelDef"
       }
     },
-    "typeDef": {
+    "modelDef": {
       "type": "object",
       "required": ["name", "kind"],
       "properties": {
@@ -216,7 +260,7 @@
           "$ref": "#/$defs/fieldDefArray"
         }
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
     "fieldDefArray": {
       "type": ["array", "null"],
@@ -226,13 +270,13 @@
     },
     "fieldDef": {
       "type": "object",
-      "required": ["name", "wireName", "type", "required"],
+      "required": ["name", "key", "type", "required"],
       "properties": {
         "name": {
           "type": "string",
           "minLength": 1
         },
-        "wireName": {
+        "key": {
           "type": "string",
           "minLength": 1
         },
@@ -242,96 +286,15 @@
         "required": {
           "type": "boolean"
         },
-        "nullable": {
-          "type": "boolean"
-        },
         "omitEmpty": {
           "type": "boolean"
         }
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
     "typeRef": {
-      "type": "object",
-      "required": ["kind"],
-      "properties": {
-        "kind": {
-          "enum": [
-            "any",
-            "bool",
-            "float",
-            "int",
-            "list",
-            "map",
-            "named",
-            "string",
-            "uuid"
-          ]
-        },
-        "name": {
-          "type": "string"
-        },
-        "nullable": {
-          "type": "boolean"
-        },
-        "elem": {
-          "$ref": "#/$defs/typeRef"
-        },
-        "key": {
-          "$ref": "#/$defs/typeRef"
-        },
-        "value": {
-          "$ref": "#/$defs/typeRef"
-        }
-      },
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "kind": {
-                "const": "named"
-              }
-            },
-            "required": ["kind"]
-          },
-          "then": {
-            "required": ["name"],
-            "properties": {
-              "name": {
-                "type": "string",
-                "minLength": 1
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "kind": {
-                "const": "list"
-              }
-            },
-            "required": ["kind"]
-          },
-          "then": {
-            "required": ["elem"]
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "kind": {
-                "const": "map"
-              }
-            },
-            "required": ["kind"]
-          },
-          "then": {
-            "required": ["value"]
-          }
-        }
-      ],
-      "additionalProperties": true
+      "type": "string",
+      "minLength": 1
     },
     "stringArray": {
       "type": ["array", "null"],

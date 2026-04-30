@@ -1,16 +1,19 @@
 {
   "version": "v1",
-  "models": [],
   "routes": {
-    "headers": [],
     "endpoints": [
       {
-        "name": "GetUser",
+        "name": "GetBooking",
         "method": "GET",
-        "path": "/users/{id}",
-        "successStatus": 200,
+        "path": "/bookings/{id}",
+        "successStatus": 204,
         "request": {
           "paths": [
+            {
+              "name": "BranchID",
+              "key": "id",
+              "type": "uuid"
+            },
             {
               "name": "ID",
               "key": "id",
@@ -19,11 +22,11 @@
           ]
         },
         "response": {
-          "envelope": true,
-          "body": "MissingUser"
+          "envelope": false
         }
       }
     ],
     "groups": []
-  }
+  },
+  "models": []
 }

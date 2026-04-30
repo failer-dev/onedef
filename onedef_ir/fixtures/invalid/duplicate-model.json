@@ -1,7 +1,6 @@
 {
   "version": "v1",
-  "endpoints": [],
-  "types": [
+  "models": [
     {
       "name": "User",
       "kind": "object",
@@ -13,11 +12,16 @@
       "fields": [
         {
           "name": "ID",
-          "wireName": "id",
-          "type": { "kind": "uuid" },
+          "key": "id",
+          "type": "uuid",
           "required": true
         }
       ]
     }
-  ]
+  ],
+  "routes": {
+    "headers": [],
+    "endpoints": [],
+    "groups": []
+  }
 }

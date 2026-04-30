@@ -19,7 +19,9 @@ type ErrorCode string
 
 const (
 	ErrorCodeDuplicateHeader        ErrorCode = "duplicate_header"
-	ErrorCodeDuplicateType          ErrorCode = "duplicate_type"
+	ErrorCodeDuplicateName          ErrorCode = "duplicate_name"
+	ErrorCodeDuplicateBinding       ErrorCode = "duplicate_binding"
+	ErrorCodeDuplicateModel         ErrorCode = "duplicate_model"
 	ErrorCodeInvalidSuccessResponse ErrorCode = "invalid_success_response"
 	ErrorCodeInvalidTypeRef         ErrorCode = "invalid_type_ref"
 	ErrorCodePathParamMismatch      ErrorCode = "path_param_mismatch"
@@ -53,7 +55,12 @@ func ErrorCodeOf(err error) ErrorCode {
 
 func DecodeJSON(data []byte) (*Document, error) {
 	var doc Document
-	if err := json.Unmarshal(data, &doc); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(string(data)))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&doc); err != nil {
+		if strings.Contains(err.Error(), "unknown field") {
+			return nil, validationError(ErrorCodeInvalidTypeRef, "$", "%v", err)
+		}
 		return nil, err
 	}
 	Normalize(&doc)
@@ -67,23 +74,16 @@ func Normalize(doc *Document) {
 	if doc == nil {
 		return
 	}
-	if doc.Naming != nil {
-		doc.Naming.Initialisms = NormalizeInitialisms(doc.Naming.Initialisms)
+	doc.Initialisms = NormalizeInitialisms(doc.Initialisms)
+	if doc.Models == nil {
+		doc.Models = []ModelDef{}
 	}
-	if doc.Groups == nil {
-		doc.Groups = []Group{}
+	if doc.Routes != nil {
+		normalizeRoutes(doc.Routes)
 	}
-	if doc.Endpoints == nil {
-		doc.Endpoints = []Endpoint{}
-	}
-	if doc.Types == nil {
-		doc.Types = []TypeDef{}
-	}
-	normalizeGroups(doc.Groups)
-	normalizeEndpoints(doc.Endpoints)
-	for i := range doc.Types {
-		if doc.Types[i].Fields == nil {
-			doc.Types[i].Fields = []FieldDef{}
+	for i := range doc.Models {
+		if doc.Models[i].Fields == nil {
+			doc.Models[i].Fields = []FieldDef{}
 		}
 	}
 }
@@ -119,61 +119,62 @@ func Validate(doc *Document) error {
 	if doc.Version != VersionV1 {
 		return validationError(ErrorCodeUnsupportedVersion, "$.version", "version must be v1")
 	}
-
-	types := make(map[string]TypeDef, len(doc.Types))
-	for i, typeDef := range doc.Types {
-		path := fmt.Sprintf("$.types[%d]", i)
-		if typeDef.Name == "" {
-			return validationError(ErrorCodeInvalidTypeRef, path+".name", "type name must not be empty")
-		}
-		if _, ok := types[typeDef.Name]; ok {
-			return validationError(ErrorCodeDuplicateType, path+".name", "type name %q is duplicated", typeDef.Name)
-		}
-		if typeDef.Kind != TypeKindObject {
-			return validationError(ErrorCodeInvalidTypeRef, path+".kind", "type kind must be object")
-		}
-		types[typeDef.Name] = typeDef
+	if doc.Routes == nil {
+		return validationError(ErrorCodeInvalidTypeRef, "$.routes", "routes is required")
 	}
 
-	for i, typeDef := range doc.Types {
-		for j, field := range typeDef.Fields {
-			path := fmt.Sprintf("$.types[%d].fields[%d].type", i, j)
-			if err := validateTypeRef(field.Type, path, types); err != nil {
+	models := make(map[string]ModelDef, len(doc.Models))
+	for i, modelDef := range doc.Models {
+		path := fmt.Sprintf("$.models[%d]", i)
+		if modelDef.Name == "" {
+			return validationError(ErrorCodeInvalidTypeRef, path+".name", "model name must not be empty")
+		}
+		if _, ok := models[modelDef.Name]; ok {
+			return validationError(ErrorCodeDuplicateModel, path+".name", "model name %q is duplicated", modelDef.Name)
+		}
+		if modelDef.Kind != ModelKindObject {
+			return validationError(ErrorCodeInvalidTypeRef, path+".kind", "model kind must be object")
+		}
+		models[modelDef.Name] = modelDef
+	}
+
+	for i, modelDef := range doc.Models {
+		for j, field := range modelDef.Fields {
+			path := fmt.Sprintf("$.models[%d].fields[%d].type", i, j)
+			if err := validateTypeRef(field.Type, path, models); err != nil {
 				return err
 			}
 		}
+		if err := validateFields(modelDef.Fields, fmt.Sprintf("$.models[%d].fields", i)); err != nil {
+			return err
+		}
 	}
 
-	for i, endpoint := range doc.Endpoints {
-		if err := validateEndpoint(endpoint, fmt.Sprintf("$.endpoints[%d]", i), types); err != nil {
-			return err
-		}
-	}
-	for i, group := range doc.Groups {
-		if err := validateGroup(group, fmt.Sprintf("$.groups[%d]", i), types); err != nil {
-			return err
-		}
+	if err := validateRoutes(*doc.Routes, "$.routes", models); err != nil {
+		return err
 	}
 
 	return nil
 }
 
+func normalizeRoutes(routes *Routes) {
+	if routes.Headers == nil {
+		routes.Headers = []Header{}
+	}
+	if routes.Endpoints == nil {
+		routes.Endpoints = []Endpoint{}
+	}
+	if routes.Groups == nil {
+		routes.Groups = []Group{}
+	}
+	normalizeEndpoints(routes.Endpoints)
+	normalizeGroups(routes.Groups)
+}
+
 func normalizeGroups(groups []Group) {
 	for i := range groups {
-		if groups[i].PathSegments == nil {
-			groups[i].PathSegments = []string{}
-		}
-		if len(groups[i].PathSegments) == 0 && groups[i].Name != "" {
-			groups[i].PathSegments = []string{groups[i].Name}
-		}
-		if groups[i].ID == "" {
-			groups[i].ID = strings.Join(groups[i].PathSegments, ".")
-		}
-		if groups[i].RequiredHeaders == nil {
-			groups[i].RequiredHeaders = []string{}
-		}
-		if groups[i].ProviderHeaders == nil {
-			groups[i].ProviderHeaders = []Parameter{}
+		if groups[i].Headers == nil {
+			groups[i].Headers = []Header{}
 		}
 		if groups[i].Endpoints == nil {
 			groups[i].Endpoints = []Endpoint{}
@@ -188,17 +189,14 @@ func normalizeGroups(groups []Group) {
 
 func normalizeEndpoints(endpoints []Endpoint) {
 	for i := range endpoints {
-		if endpoints[i].RequiredHeaders == nil {
-			endpoints[i].RequiredHeaders = []string{}
+		if endpoints[i].Request.Paths == nil {
+			endpoints[i].Request.Paths = []Parameter{}
 		}
-		if endpoints[i].Request.PathParams == nil {
-			endpoints[i].Request.PathParams = []Parameter{}
+		if endpoints[i].Request.Queries == nil {
+			endpoints[i].Request.Queries = []Parameter{}
 		}
-		if endpoints[i].Request.QueryParams == nil {
-			endpoints[i].Request.QueryParams = []Parameter{}
-		}
-		if endpoints[i].Request.HeaderParams == nil {
-			endpoints[i].Request.HeaderParams = []Parameter{}
+		if endpoints[i].Request.Headers == nil {
+			endpoints[i].Request.Headers = []HeaderParameter{}
 		}
 		if endpoints[i].Error.Body.Kind == "" {
 			endpoints[i].Error = Error{
@@ -208,35 +206,68 @@ func normalizeEndpoints(endpoints []Endpoint) {
 	}
 }
 
-func validateGroup(group Group, path string, types map[string]TypeDef) error {
-	if group.Name == "" {
-		return validationError(ErrorCodeInvalidTypeRef, path+".name", "group name must not be empty")
-	}
-	if err := validateHeaderNames(group.RequiredHeaders, path+".requiredHeaders"); err != nil {
-		return err
-	}
-	for i, param := range group.ProviderHeaders {
-		if err := validateParameter(param, fmt.Sprintf("%s.providerHeaders[%d]", path, i), types); err != nil {
+func validateRoutes(routes Routes, path string, models map[string]ModelDef) error {
+	for i, header := range routes.Headers {
+		if err := validateHeader(header, fmt.Sprintf("%s.headers[%d]", path, i), models); err != nil {
 			return err
 		}
 	}
-	if err := validateHeaderParams(group.ProviderHeaders, path+".providerHeaders"); err != nil {
+	if err := validateHeaders(routes.Headers, path+".headers"); err != nil {
 		return err
 	}
-	for i, endpoint := range group.Endpoints {
-		if err := validateEndpoint(endpoint, fmt.Sprintf("%s.endpoints[%d]", path, i), types); err != nil {
+	if err := validateEndpointNames(routes.Endpoints, path+".endpoints"); err != nil {
+		return err
+	}
+	if err := validateGroupNames(routes.Groups, path+".groups"); err != nil {
+		return err
+	}
+	effectiveHeaders := cloneHeaders(routes.Headers)
+	for i, endpoint := range routes.Endpoints {
+		if err := validateEndpoint(endpoint, fmt.Sprintf("%s.endpoints[%d]", path, i), models, effectiveHeaders); err != nil {
 			return err
 		}
 	}
-	for i, child := range group.Groups {
-		if err := validateGroup(child, fmt.Sprintf("%s.groups[%d]", path, i), types); err != nil {
+	for i, group := range routes.Groups {
+		if err := validateGroup(group, fmt.Sprintf("%s.groups[%d]", path, i), models, effectiveHeaders); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func validateEndpoint(endpoint Endpoint, path string, types map[string]TypeDef) error {
+func validateGroup(group Group, path string, models map[string]ModelDef, inheritedHeaders []Header) error {
+	if group.Name == "" {
+		return validationError(ErrorCodeInvalidTypeRef, path+".name", "group name must not be empty")
+	}
+	for i, header := range group.Headers {
+		if err := validateHeader(header, fmt.Sprintf("%s.headers[%d]", path, i), models); err != nil {
+			return err
+		}
+	}
+	if err := validateHeaders(group.Headers, path+".headers"); err != nil {
+		return err
+	}
+	if err := validateEndpointNames(group.Endpoints, path+".endpoints"); err != nil {
+		return err
+	}
+	if err := validateGroupNames(group.Groups, path+".groups"); err != nil {
+		return err
+	}
+	effectiveHeaders := append(cloneHeaders(inheritedHeaders), group.Headers...)
+	for i, endpoint := range group.Endpoints {
+		if err := validateEndpoint(endpoint, fmt.Sprintf("%s.endpoints[%d]", path, i), models, effectiveHeaders); err != nil {
+			return err
+		}
+	}
+	for i, child := range group.Groups {
+		if err := validateGroup(child, fmt.Sprintf("%s.groups[%d]", path, i), models, effectiveHeaders); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateEndpoint(endpoint Endpoint, path string, models map[string]ModelDef, groupHeaders []Header) error {
 	if endpoint.Name == "" {
 		return validationError(ErrorCodeInvalidTypeRef, path+".name", "endpoint name must not be empty")
 	}
@@ -249,92 +280,183 @@ func validateEndpoint(endpoint Endpoint, path string, types map[string]TypeDef) 
 	if endpoint.SuccessStatus < 200 || endpoint.SuccessStatus > 299 {
 		return validationError(ErrorCodeInvalidSuccessResponse, path+".successStatus", "success status must be 2xx")
 	}
-	if err := validateHeaderNames(endpoint.RequiredHeaders, path+".requiredHeaders"); err != nil {
-		return err
-	}
 	if err := validatePathParams(endpoint, path); err != nil {
 		return err
 	}
-	if err := validateRequest(endpoint.Request, path+".request", types); err != nil {
+	if err := validateRequest(endpoint.Request, path+".request", models); err != nil {
 		return err
 	}
-	if err := validateResponse(endpoint, path+".response", types); err != nil {
+	if err := validateGroupAndRequestHeaders(groupHeaders, endpoint.Request.Headers, path+".request.headers"); err != nil {
 		return err
 	}
-	if err := validateTypeRef(endpoint.Error.Body, path+".error.body", types); err != nil {
+	if err := validateResponse(endpoint, path+".response", models); err != nil {
+		return err
+	}
+	if err := validateTypeRef(endpoint.Error.Body, path+".error.body", models); err != nil {
 		return err
 	}
 	return nil
 }
 
-func validateRequest(request Request, path string, types map[string]TypeDef) error {
-	for i, param := range request.PathParams {
-		if err := validateParameter(param, fmt.Sprintf("%s.pathParams[%d]", path, i), types); err != nil {
-			return err
-		}
-		if !param.Required {
-			return validationError(ErrorCodePathParamMismatch, fmt.Sprintf("%s.pathParams[%d].required", path, i), "path parameters must be required")
-		}
-	}
-	for i, param := range request.QueryParams {
-		if err := validateParameter(param, fmt.Sprintf("%s.queryParams[%d]", path, i), types); err != nil {
+func validateRequest(request Request, path string, models map[string]ModelDef) error {
+	for i, param := range request.Paths {
+		if err := validateParameter(param, fmt.Sprintf("%s.paths[%d]", path, i), models); err != nil {
 			return err
 		}
 	}
-	for i, param := range request.HeaderParams {
-		if err := validateParameter(param, fmt.Sprintf("%s.headerParams[%d]", path, i), types); err != nil {
+	for i, param := range request.Queries {
+		if err := validateParameter(param, fmt.Sprintf("%s.queries[%d]", path, i), models); err != nil {
 			return err
 		}
 	}
-	if err := validateHeaderParams(request.HeaderParams, path+".headerParams"); err != nil {
+	for i, param := range request.Headers {
+		if err := validateHeaderParameter(param, fmt.Sprintf("%s.headers[%d]", path, i), models); err != nil {
+			return err
+		}
+	}
+	if err := validateHeaderParameters(request.Headers, path+".headers"); err != nil {
+		return err
+	}
+	if err := validateParameters(request.Paths, path+".paths"); err != nil {
+		return err
+	}
+	if err := validateParameters(request.Queries, path+".queries"); err != nil {
 		return err
 	}
 	if request.Body != nil {
-		if err := validateTypeRef(*request.Body, path+".body", types); err != nil {
+		if err := validateTypeRef(*request.Body, path+".body", models); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func validateParameter(param Parameter, path string, types map[string]TypeDef) error {
+func validateEndpointNames(endpoints []Endpoint, path string) error {
+	seen := make(map[string]string, len(endpoints))
+	for i, endpoint := range endpoints {
+		name := endpoint.Name
+		if endpoint.SDKName != "" {
+			name = endpoint.SDKName
+		}
+		if existing, ok := seen[name]; ok {
+			return validationError(ErrorCodeDuplicateName, fmt.Sprintf("%s[%d].name", path, i), "endpoint name %q duplicates %q", name, existing)
+		}
+		seen[name] = name
+	}
+	return nil
+}
+
+func validateGroupNames(groups []Group, path string) error {
+	seen := make(map[string]string, len(groups))
+	for i, group := range groups {
+		if existing, ok := seen[group.Name]; ok {
+			return validationError(ErrorCodeDuplicateName, fmt.Sprintf("%s[%d].name", path, i), "group name %q duplicates %q", group.Name, existing)
+		}
+		seen[group.Name] = group.Name
+	}
+	return nil
+}
+
+func validateFields(fields []FieldDef, path string) error {
+	seenNames := make(map[string]string, len(fields))
+	seenKeys := make(map[string]string, len(fields))
+	for i, field := range fields {
+		if existing, ok := seenNames[field.Name]; ok {
+			return validationError(ErrorCodeDuplicateName, fmt.Sprintf("%s[%d].name", path, i), "field name %q duplicates %q", field.Name, existing)
+		}
+		seenNames[field.Name] = field.Name
+		if existing, ok := seenKeys[field.Key]; ok {
+			return validationError(ErrorCodeDuplicateBinding, fmt.Sprintf("%s[%d].key", path, i), "field key %q duplicates %q", field.Key, existing)
+		}
+		seenKeys[field.Key] = field.Key
+	}
+	return nil
+}
+
+func validateParameters(params []Parameter, path string) error {
+	seen := make(map[string]string, len(params))
+	for i, param := range params {
+		if existing, ok := seen[param.Key]; ok {
+			return validationError(ErrorCodeDuplicateBinding, fmt.Sprintf("%s[%d].key", path, i), "parameter key %q duplicates %q", param.Key, existing)
+		}
+		seen[param.Key] = param.Key
+	}
+	return nil
+}
+
+func validateParameter(param Parameter, path string, models map[string]ModelDef) error {
 	if param.Name == "" {
 		return validationError(ErrorCodeInvalidTypeRef, path+".name", "parameter name must not be empty")
 	}
-	if param.WireName == "" {
-		return validationError(ErrorCodeInvalidTypeRef, path+".wireName", "parameter wireName must not be empty")
+	if param.Key == "" {
+		return validationError(ErrorCodeInvalidTypeRef, path+".key", "parameter key must not be empty")
 	}
-	return validateTypeRef(param.Type, path+".type", types)
+	return validateTypeRef(param.Type, path+".type", models)
 }
 
-func validateHeaderNames(headers []string, path string) error {
-	seen := make(map[string]string, len(headers))
-	for i, header := range headers {
-		normalized := normalizeHeaderName(header)
-		if normalized == "" {
-			return validationError(ErrorCodeInvalidTypeRef, fmt.Sprintf("%s[%d]", path, i), "header name must not be empty")
-		}
-		if existing, ok := seen[normalized]; ok {
-			return validationError(ErrorCodeDuplicateHeader, fmt.Sprintf("%s[%d]", path, i), "header %q duplicates %q", header, existing)
-		}
-		seen[normalized] = header
+func validateHeaderParameter(param HeaderParameter, path string, models map[string]ModelDef) error {
+	if param.Name == "" {
+		return validationError(ErrorCodeInvalidTypeRef, path+".name", "header parameter name must not be empty")
 	}
-	return nil
+	if param.Key == "" {
+		return validationError(ErrorCodeInvalidTypeRef, path+".key", "header parameter key must not be empty")
+	}
+	return validateTypeRef(param.Type, path+".type", models)
 }
 
-func validateHeaderParams(params []Parameter, path string) error {
+func validateHeader(header Header, path string, models map[string]ModelDef) error {
+	if header.Key == "" {
+		return validationError(ErrorCodeInvalidTypeRef, path+".key", "header key must not be empty")
+	}
+	return validateTypeRef(header.Type, path+".type", models)
+}
+
+func validateHeaderParameters(params []HeaderParameter, path string) error {
 	seen := make(map[string]string, len(params))
 	for i, param := range params {
-		normalized := normalizeHeaderName(param.WireName)
+		normalized := normalizeHeaderName(param.Key)
 		if existing, ok := seen[normalized]; ok {
-			return validationError(ErrorCodeDuplicateHeader, fmt.Sprintf("%s[%d].wireName", path, i), "header parameter %q duplicates %q", param.WireName, existing)
+			return validationError(ErrorCodeDuplicateHeader, fmt.Sprintf("%s[%d].key", path, i), "header parameter %q duplicates %q", param.Key, existing)
 		}
-		seen[normalized] = param.WireName
+		seen[normalized] = param.Key
 	}
 	return nil
 }
 
-func validateResponse(endpoint Endpoint, path string, types map[string]TypeDef) error {
+func validateHeaders(headers []Header, path string) error {
+	seen := make(map[string]string, len(headers))
+	for i, header := range headers {
+		normalized := normalizeHeaderName(header.Key)
+		if existing, ok := seen[normalized]; ok {
+			return validationError(ErrorCodeDuplicateHeader, fmt.Sprintf("%s[%d].key", path, i), "header %q duplicates %q", header.Key, existing)
+		}
+		seen[normalized] = header.Key
+	}
+	return nil
+}
+
+func validateGroupAndRequestHeaders(groupHeaders []Header, requestHeaders []HeaderParameter, path string) error {
+	seen := make(map[string]string, len(groupHeaders))
+	for _, header := range groupHeaders {
+		seen[normalizeHeaderName(header.Key)] = header.Key
+	}
+	for i, header := range requestHeaders {
+		normalized := normalizeHeaderName(header.Key)
+		if existing, ok := seen[normalized]; ok {
+			return validationError(ErrorCodeDuplicateHeader, fmt.Sprintf("%s[%d].key", path, i), "request header %q duplicates group header %q", header.Key, existing)
+		}
+	}
+	return nil
+}
+
+func cloneHeaders(headers []Header) []Header {
+	if headers == nil {
+		return nil
+	}
+	return append([]Header(nil), headers...)
+}
+
+func validateResponse(endpoint Endpoint, path string, models map[string]ModelDef) error {
 	if endpoint.SuccessStatus == http.StatusNoContent {
 		if endpoint.Response.Envelope || endpoint.Response.Body != nil {
 			return validationError(ErrorCodeInvalidSuccessResponse, path, "204 response must not use an envelope or body")
@@ -347,10 +469,10 @@ func validateResponse(endpoint Endpoint, path string, types map[string]TypeDef) 
 	if endpoint.Response.Body == nil {
 		return validationError(ErrorCodeInvalidSuccessResponse, path+".body", "enveloped response must declare a body")
 	}
-	return validateTypeRef(*endpoint.Response.Body, path+".body", types)
+	return validateTypeRef(*endpoint.Response.Body, path+".body", models)
 }
 
-func validateTypeRef(typeRef TypeRef, path string, types map[string]TypeDef) error {
+func validateTypeRef(typeRef TypeRef, path string, models map[string]ModelDef) error {
 	switch typeRef.Kind {
 	case TypeKindAny, TypeKindBool, TypeKindFloat, TypeKindInt, TypeKindString, TypeKindUUID:
 		return nil
@@ -361,7 +483,7 @@ func validateTypeRef(typeRef TypeRef, path string, types map[string]TypeDef) err
 		if typeRef.Name == BuiltinDefaultError {
 			return nil
 		}
-		if _, ok := types[typeRef.Name]; !ok {
+		if _, ok := models[typeRef.Name]; !ok {
 			return validationError(ErrorCodeUnknownTypeRef, path+".name", "unknown named type %q", typeRef.Name)
 		}
 		return nil
@@ -369,7 +491,7 @@ func validateTypeRef(typeRef TypeRef, path string, types map[string]TypeDef) err
 		if typeRef.Elem == nil {
 			return validationError(ErrorCodeInvalidTypeRef, path+".elem", "list type ref must declare elem")
 		}
-		return validateTypeRef(*typeRef.Elem, path+".elem", types)
+		return validateTypeRef(*typeRef.Elem, path+".elem", models)
 	case TypeKindMap:
 		if typeRef.Key != nil && typeRef.Key.Kind != TypeKindString {
 			return validationError(ErrorCodeInvalidTypeRef, path+".key", "map key must be string")
@@ -377,7 +499,7 @@ func validateTypeRef(typeRef TypeRef, path string, types map[string]TypeDef) err
 		if typeRef.Value == nil {
 			return validationError(ErrorCodeInvalidTypeRef, path+".value", "map type ref must declare value")
 		}
-		return validateTypeRef(*typeRef.Value, path+".value", types)
+		return validateTypeRef(*typeRef.Value, path+".value", models)
 	default:
 		return validationError(ErrorCodeInvalidTypeRef, path+".kind", "unsupported type kind %q", typeRef.Kind)
 	}
@@ -392,27 +514,27 @@ func validatePathParams(endpoint Endpoint, path string) error {
 		pathVars[match[1]] = struct{}{}
 	}
 
-	paramVars := make(map[string]struct{}, len(endpoint.Request.PathParams))
-	for _, param := range endpoint.Request.PathParams {
-		paramVars[param.WireName] = struct{}{}
+	paramVars := make(map[string]struct{}, len(endpoint.Request.Paths))
+	for _, param := range endpoint.Request.Paths {
+		paramVars[param.Key] = struct{}{}
 	}
 
 	for pathVar := range pathVars {
 		if _, ok := paramVars[pathVar]; !ok {
-			return validationError(ErrorCodePathParamMismatch, path+".request.pathParams", "path variable %q is missing from request pathParams", pathVar)
+			return validationError(ErrorCodePathParamMismatch, path+".request.paths", "path variable %q is missing from request paths", pathVar)
 		}
 	}
 	for paramVar := range paramVars {
 		if _, ok := pathVars[paramVar]; !ok {
-			return validationError(ErrorCodePathParamMismatch, path+".request.pathParams", "path parameter %q does not exist in endpoint path", paramVar)
+			return validationError(ErrorCodePathParamMismatch, path+".request.paths", "path parameter %q does not exist in endpoint path", paramVar)
 		}
 	}
 	return nil
 }
 
-func validHTTPMethod(method string) bool {
+func validHTTPMethod(method HTTPMethod) bool {
 	switch method {
-	case http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodHead, http.MethodOptions:
+	case HTTPMethodGET, HTTPMethodPOST, HTTPMethodPUT, HTTPMethodPATCH, HTTPMethodDELETE, HTTPMethodHEAD, HTTPMethodOPTIONS:
 		return true
 	default:
 		return false

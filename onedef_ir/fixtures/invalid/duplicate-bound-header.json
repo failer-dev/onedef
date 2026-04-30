@@ -1,0 +1,47 @@
+{
+  "version": "v1",
+  "models": [
+    {
+      "name": "Order",
+      "kind": "object",
+      "fields": []
+    }
+  ],
+  "routes": {
+    "headers": [],
+    "endpoints": [],
+    "groups": [
+      {
+        "name": "orders",
+        "endpoints": [
+          {
+            "name": "CreateOrder",
+            "method": "POST",
+            "path": "/orders",
+            "successStatus": 201,
+            "request": {
+              "headers": [
+                {
+                  "name": "Authorization",
+                  "key": "authorization",
+                  "type": "string",
+                  "required": true
+                }
+              ]
+            },
+            "response": {
+              "envelope": true,
+              "body": "Order"
+            }
+          }
+        ],
+        "headers": [
+          {
+            "key": "Authorization",
+            "type": "string"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -101,17 +101,14 @@ func TestBuildDocument_BuildsFlatEndpoints(t *testing.T) {
 		t.Fatalf("BuildDocument() error = %v", err)
 	}
 
-	if got := strings.Join(doc.Naming.Initialisms, ","); got != "OAuth,JWT,ID" {
+	if got := strings.Join(doc.Initialisms, ","); got != "OAuth,JWT,ID" {
 		t.Fatalf("Initialisms = %q, want OAuth,JWT,ID", got)
 	}
-	if len(doc.Endpoints) != 5 {
-		t.Fatalf("len(Endpoints) = %d, want 5", len(doc.Endpoints))
+	if len(doc.Routes.Endpoints) != 5 {
+		t.Fatalf("len(Endpoints) = %d, want 5", len(doc.Routes.Endpoints))
 	}
 
 	create := findEndpoint(t, doc, "createUser")
-	if create.Group != "user" {
-		t.Fatalf("createUser group = %q, want user", create.Group)
-	}
 	if create.Request.Body == nil || create.Request.Body.Name != "createUserBody" {
 		t.Fatalf("createUser body = %#v, want named createUserBody", create.Request.Body)
 	}
@@ -120,9 +117,6 @@ func TestBuildDocument_BuildsFlatEndpoints(t *testing.T) {
 	}
 
 	login := findEndpoint(t, doc, "loginAuth")
-	if login.Group != "auth" {
-		t.Fatalf("loginAuth group = %q, want auth", login.Group)
-	}
 	if login.Request.Body == nil || login.Request.Body.Name != "loginAuthRequest" {
 		t.Fatalf("loginAuth body = %#v, want loginAuthRequest", login.Request.Body)
 	}
@@ -131,20 +125,14 @@ func TestBuildDocument_BuildsFlatEndpoints(t *testing.T) {
 	}
 
 	search := findEndpoint(t, doc, "searchUsers")
-	if len(search.Request.QueryParams) != 2 {
-		t.Fatalf("len(searchUsers query params) = %d, want 2", len(search.Request.QueryParams))
-	}
-	if search.Request.QueryParams[0].Required || search.Request.QueryParams[1].Required {
-		t.Fatalf("query params should be optional: %#v", search.Request.QueryParams)
+	if len(search.Request.Queries) != 2 {
+		t.Fatalf("len(searchUsers query params) = %d, want 2", len(search.Request.Queries))
 	}
 	if search.Response.Body == nil || search.Response.Body.Kind != ir.TypeKindList || search.Response.Body.Elem == nil || search.Response.Body.Elem.Name != "sharedUser" {
 		t.Fatalf("searchUsers response = %#v, want list of sharedUser", search.Response.Body)
 	}
 
 	deleteUser := findEndpoint(t, doc, "deleteUser")
-	if deleteUser.Group != "user" {
-		t.Fatalf("deleteUser group = %q, want user", deleteUser.Group)
-	}
 	if deleteUser.Response.Envelope || deleteUser.Response.Body != nil {
 		t.Fatalf("deleteUser response = %#v, want no envelope/body", deleteUser.Response)
 	}
@@ -153,17 +141,17 @@ func TestBuildDocument_BuildsFlatEndpoints(t *testing.T) {
 	if update.Request.Body == nil || update.Request.Body.Name != "updateUserRequest" {
 		t.Fatalf("updateUser body = %#v, want synthetic updateUserRequest", update.Request.Body)
 	}
-	bodyType := findType(t, doc, "updateUserRequest")
-	if len(bodyType.Fields) != 1 || bodyType.Fields[0].WireName != "name" {
-		t.Fatalf("updateUserRequest fields = %#v, want only name field", bodyType.Fields)
+	bodyModel := findModel(t, doc, "updateUserRequest")
+	if len(bodyModel.Fields) != 1 || bodyModel.Fields[0].Key != "name" {
+		t.Fatalf("updateUserRequest fields = %#v, want only name field", bodyModel.Fields)
 	}
 
-	userType := findType(t, doc, "sharedUser")
-	if len(userType.Fields) != 4 {
-		t.Fatalf("sharedUser fields = %#v, want 4 fields", userType.Fields)
+	userModel := findModel(t, doc, "sharedUser")
+	if len(userModel.Fields) != 4 {
+		t.Fatalf("sharedUser fields = %#v, want 4 fields", userModel.Fields)
 	}
-	profileField := findField(t, userType, "Profile")
-	if !profileField.Nullable || profileField.Type.Name != "sharedUserProfile" {
+	profileField := findField(t, userModel, "Profile")
+	if !profileField.Type.Nullable || profileField.Type.Name != "sharedUserProfile" {
 		t.Fatalf("Profile field = %#v, want nullable sharedUserProfile", profileField)
 	}
 }
@@ -195,15 +183,12 @@ func TestBuildDocument_BuildsGroupsHeadersAndCustomError(t *testing.T) {
 		t.Fatalf("BuildDocument() error = %v", err)
 	}
 
-	if len(doc.Groups) != 1 {
-		t.Fatalf("len(Groups) = %d, want 1", len(doc.Groups))
+	if len(doc.Routes.Groups) != 1 {
+		t.Fatalf("len(Groups) = %d, want 1", len(doc.Routes.Groups))
 	}
-	group := doc.Groups[0]
-	if got := strings.Join(group.RequiredHeaders, ","); got != "Authorization" {
-		t.Fatalf("required headers = %q, want Authorization", got)
-	}
-	if len(group.ProviderHeaders) != 1 || group.ProviderHeaders[0].Type.Kind != ir.TypeKindString {
-		t.Fatalf("provider headers = %#v, want string Authorization", group.ProviderHeaders)
+	group := doc.Routes.Groups[0]
+	if len(group.Headers) != 1 || group.Headers[0].Key != "Authorization" || group.Headers[0].Type.Kind != ir.TypeKindString {
+		t.Fatalf("group header = %#v, want string Authorization", group.Headers)
 	}
 	if got := group.Endpoints[0].Path; got != "/api/v1/users/{id}" {
 		t.Fatalf("endpoint path = %q, want grouped full path", got)
@@ -211,8 +196,8 @@ func TestBuildDocument_BuildsGroupsHeadersAndCustomError(t *testing.T) {
 	if got := group.Endpoints[0].Error.Body.Name; got != "groupedError" {
 		t.Fatalf("error body = %q, want groupedError", got)
 	}
-	if !hasType(doc, "groupedError") {
-		t.Fatalf("types = %#v, want groupedError", doc.Types)
+	if !hasModel(doc, "groupedError") {
+		t.Fatalf("models = %#v, want groupedError", doc.Models)
 	}
 }
 
@@ -234,11 +219,11 @@ func endpointStruct(t *testing.T, endpoint any) meta.EndpointStruct {
 	if structType.Kind() == reflect.Pointer {
 		structType = structType.Elem()
 	}
-	method, path, pathParams, successStatus, err := inspect.InspectEndpointMethodMarker(structType)
+	method, path, pathVariables, successStatus, err := inspect.InspectEndpointMethodMarker(structType)
 	if err != nil {
 		t.Fatalf("InspectEndpointMethodMarker() error = %v", err)
 	}
-	request, err := inspect.InspectRequest(structType, method, pathParams)
+	request, err := inspect.InspectRequest(structType, method, pathVariables)
 	if err != nil {
 		t.Fatalf("InspectRequest() error = %v", err)
 	}
@@ -280,7 +265,7 @@ func qualifiedStructName(structType reflect.Type) string {
 func findEndpoint(t *testing.T, doc *ir.Document, name string) ir.Endpoint {
 	t.Helper()
 
-	for _, endpoint := range doc.Endpoints {
+	for _, endpoint := range doc.Routes.Endpoints {
 		if endpoint.Name == name {
 			return endpoint
 		}
@@ -290,35 +275,35 @@ func findEndpoint(t *testing.T, doc *ir.Document, name string) ir.Endpoint {
 	return ir.Endpoint{}
 }
 
-func findType(t *testing.T, doc *ir.Document, name string) ir.TypeDef {
+func findModel(t *testing.T, doc *ir.Document, name string) ir.ModelDef {
 	t.Helper()
 
-	for _, typeDef := range doc.Types {
-		if typeDef.Name == name {
-			return typeDef
+	for _, modelDef := range doc.Models {
+		if modelDef.Name == name {
+			return modelDef
 		}
 	}
 
-	t.Fatalf("type %q not found", name)
-	return ir.TypeDef{}
+	t.Fatalf("model %q not found", name)
+	return ir.ModelDef{}
 }
 
-func findField(t *testing.T, typeDef ir.TypeDef, name string) ir.FieldDef {
+func findField(t *testing.T, modelDef ir.ModelDef, name string) ir.FieldDef {
 	t.Helper()
 
-	for _, field := range typeDef.Fields {
+	for _, field := range modelDef.Fields {
 		if field.Name == name {
 			return field
 		}
 	}
 
-	t.Fatalf("field %q not found in %#v", name, typeDef)
+	t.Fatalf("field %q not found in %#v", name, modelDef)
 	return ir.FieldDef{}
 }
 
-func hasType(doc *ir.Document, name string) bool {
-	for _, typeDef := range doc.Types {
-		if typeDef.Name == name {
+func hasModel(doc *ir.Document, name string) bool {
+	for _, modelDef := range doc.Models {
+		if modelDef.Name == name {
 			return true
 		}
 	}

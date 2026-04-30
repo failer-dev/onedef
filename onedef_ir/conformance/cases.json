@@ -21,7 +21,7 @@
         "schema",
         "semantic",
         "group_tree",
-        "required_headers"
+        "group_header"
       ]
     },
     {
@@ -45,11 +45,11 @@
       ]
     },
     {
-      "id": "invalid/duplicate-type",
-      "file": "../fixtures/invalid/duplicate-type.json",
+      "id": "invalid/duplicate-model",
+      "file": "../fixtures/invalid/duplicate-model.json",
       "valid": false,
       "checks": ["semantic"],
-      "expectedError": "duplicate_type"
+      "expectedError": "duplicate_model"
     },
     {
       "id": "invalid/duplicate-header",
@@ -57,6 +57,48 @@
       "valid": false,
       "checks": ["semantic"],
       "expectedError": "duplicate_header"
+    },
+    {
+      "id": "invalid/duplicate-bound-header",
+      "file": "../fixtures/invalid/duplicate-bound-header.json",
+      "valid": false,
+      "checks": ["semantic"],
+      "expectedError": "duplicate_header"
+    },
+    {
+      "id": "invalid/duplicate-group",
+      "file": "../fixtures/invalid/duplicate-group.json",
+      "valid": false,
+      "checks": ["semantic"],
+      "expectedError": "duplicate_name"
+    },
+    {
+      "id": "invalid/duplicate-endpoint",
+      "file": "../fixtures/invalid/duplicate-endpoint.json",
+      "valid": false,
+      "checks": ["semantic"],
+      "expectedError": "duplicate_name"
+    },
+    {
+      "id": "invalid/duplicate-field-key",
+      "file": "../fixtures/invalid/duplicate-field-key.json",
+      "valid": false,
+      "checks": ["semantic"],
+      "expectedError": "duplicate_binding"
+    },
+    {
+      "id": "invalid/duplicate-query-key",
+      "file": "../fixtures/invalid/duplicate-query-key.json",
+      "valid": false,
+      "checks": ["semantic"],
+      "expectedError": "duplicate_binding"
+    },
+    {
+      "id": "invalid/duplicate-path-key",
+      "file": "../fixtures/invalid/duplicate-path-key.json",
+      "valid": false,
+      "checks": ["semantic"],
+      "expectedError": "duplicate_binding"
     },
     {
       "id": "invalid/unknown-type-ref",
@@ -78,6 +120,41 @@
       "valid": false,
       "checks": ["semantic"],
       "expectedError": "invalid_success_response"
+    },
+    {
+      "id": "invalid/field-nullable",
+      "file": "../fixtures/invalid/field-nullable.json",
+      "valid": false,
+      "checks": ["schema", "semantic"],
+      "expectedError": "invalid_type_ref"
+    },
+    {
+      "id": "invalid/top-level-types",
+      "file": "../fixtures/invalid/top-level-types.json",
+      "valid": false,
+      "checks": ["schema", "semantic"],
+      "expectedError": "invalid_type_ref"
+    },
+    {
+      "id": "invalid/top-level-endpoints",
+      "file": "../fixtures/invalid/top-level-endpoints.json",
+      "valid": false,
+      "checks": ["schema", "semantic"],
+      "expectedError": "invalid_type_ref"
+    },
+    {
+      "id": "invalid/endpoint-group",
+      "file": "../fixtures/invalid/endpoint-group.json",
+      "valid": false,
+      "checks": ["schema", "semantic"],
+      "expectedError": "invalid_type_ref"
+    },
+    {
+      "id": "invalid/request-singular-bindings",
+      "file": "../fixtures/invalid/request-singular-bindings.json",
+      "valid": false,
+      "checks": ["schema", "semantic"],
+      "expectedError": "invalid_type_ref"
     }
   ]
 }

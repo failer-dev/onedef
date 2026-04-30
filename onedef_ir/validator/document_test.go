@@ -1,9 +1,11 @@
 package validator
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -36,11 +38,22 @@ func TestDecodeJSON_InvalidCanonicalFixtures(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]ErrorCode{
-		"duplicate-type.json":        ErrorCodeDuplicateType,
-		"duplicate-header.json":      ErrorCodeDuplicateHeader,
-		"unknown-type-ref.json":      ErrorCodeUnknownTypeRef,
-		"bad-path-param.json":        ErrorCodePathParamMismatch,
-		"bad-204-response-body.json": ErrorCodeInvalidSuccessResponse,
+		"duplicate-model.json":           ErrorCodeDuplicateModel,
+		"duplicate-header.json":          ErrorCodeDuplicateHeader,
+		"duplicate-bound-header.json":    ErrorCodeDuplicateHeader,
+		"duplicate-group.json":           ErrorCodeDuplicateName,
+		"duplicate-endpoint.json":        ErrorCodeDuplicateName,
+		"duplicate-field-key.json":       ErrorCodeDuplicateBinding,
+		"duplicate-query-key.json":       ErrorCodeDuplicateBinding,
+		"duplicate-path-key.json":        ErrorCodeDuplicateBinding,
+		"unknown-type-ref.json":          ErrorCodeUnknownTypeRef,
+		"bad-path-param.json":            ErrorCodePathParamMismatch,
+		"bad-204-response-body.json":     ErrorCodeInvalidSuccessResponse,
+		"field-nullable.json":            ErrorCodeInvalidTypeRef,
+		"top-level-types.json":           ErrorCodeInvalidTypeRef,
+		"top-level-endpoints.json":       ErrorCodeInvalidTypeRef,
+		"endpoint-group.json":            ErrorCodeInvalidTypeRef,
+		"request-singular-bindings.json": ErrorCodeInvalidTypeRef,
 	}
 
 	for name, wantCode := range tests {
@@ -67,31 +80,32 @@ func TestNormalize_DefaultsOmittedCollectionsAndError(t *testing.T) {
 	var doc Document
 	if err := json.Unmarshal([]byte(`{
 		"version": "v1",
-		"groups": [
-			{
-				"name": "users",
-				"endpoints": [
-					{
-						"name": "DeleteUser",
-						"method": "DELETE",
-						"path": "/users/{id}",
-						"successStatus": 204,
-						"request": {
-							"pathParams": [
-								{
-									"name": "ID",
-									"wireName": "id",
-									"type": { "kind": "uuid" },
-									"required": true
-								}
-							]
-						},
-						"response": { "envelope": false }
-					}
-				]
-			}
-		],
-		"types": []
+		"routes": {
+			"groups": [
+				{
+					"name": "users",
+					"endpoints": [
+						{
+							"name": "DeleteUser",
+							"method": "DELETE",
+							"path": "/users/{id}",
+							"successStatus": 204,
+							"request": {
+								"paths": [
+									{
+										"name": "ID",
+										"key": "id",
+										"type": "uuid"
+									}
+								]
+							},
+							"response": { "envelope": false }
+						}
+					]
+				}
+			]
+		},
+		"models": []
 	}`), &doc); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
@@ -100,12 +114,9 @@ func TestNormalize_DefaultsOmittedCollectionsAndError(t *testing.T) {
 	if err := Validate(&doc); err != nil {
 		t.Fatalf("Validate() error = %v", err)
 	}
-	group := doc.Groups[0]
-	if group.ID != "users" {
-		t.Fatalf("group.ID = %q, want users", group.ID)
-	}
-	if len(group.PathSegments) != 1 || group.PathSegments[0] != "users" {
-		t.Fatalf("group.PathSegments = %#v, want users", group.PathSegments)
+	group := doc.Routes.Groups[0]
+	if group.Name != "users" {
+		t.Fatalf("group.Name = %q, want users", group.Name)
 	}
 	if got := group.Endpoints[0].Error.Body.Name; got != BuiltinDefaultError {
 		t.Fatalf("error body = %q, want %q", got, BuiltinDefaultError)
@@ -115,25 +126,23 @@ func TestNormalize_DefaultsOmittedCollectionsAndError(t *testing.T) {
 func TestValidate_RejectsUnknownTypeKind(t *testing.T) {
 	t.Parallel()
 
-	var doc Document
-	if err := json.Unmarshal([]byte(`{
-		"version": "v1",
-		"endpoints": [
-			{
-				"name": "GetClock",
-				"method": "GET",
-				"path": "/clock",
-				"successStatus": 200,
-				"request": {},
-				"response": {
-					"envelope": true,
-					"body": { "kind": "datetime" }
-				}
-			}
-		],
-		"types": []
-	}`), &doc); err != nil {
-		t.Fatalf("json.Unmarshal() error = %v", err)
+	doc := Document{
+		Version: VersionV1,
+		Routes: &Routes{
+			Endpoints: []Endpoint{
+				{
+					Name:          "GetClock",
+					Method:        "GET",
+					Path:          "/clock",
+					SuccessStatus: 200,
+					Response: Response{
+						Envelope: true,
+						Body:     &TypeRef{Kind: "datetime"},
+					},
+				},
+			},
+		},
+		Models: []ModelDef{},
 	}
 
 	Normalize(&doc)
@@ -143,6 +152,61 @@ func TestValidate_RejectsUnknownTypeKind(t *testing.T) {
 	}
 	if got := ErrorCodeOf(err); got != ErrorCodeInvalidTypeRef {
 		t.Fatalf("ErrorCodeOf() = %q, want %q; err = %v", got, ErrorCodeInvalidTypeRef, err)
+	}
+}
+
+func TestValidate_RejectsUnknownModelKind(t *testing.T) {
+	t.Parallel()
+
+	doc := Document{
+		Version: VersionV1,
+		Routes:  &Routes{},
+		Models: []ModelDef{
+			{
+				Name: "BookingStatus",
+				Kind: ModelKind("enum"),
+			},
+		},
+	}
+
+	Normalize(&doc)
+	err := Validate(&doc)
+	if err == nil {
+		t.Fatal("Validate() error = nil, want error")
+	}
+	if got := ErrorCodeOf(err); got != ErrorCodeInvalidTypeRef {
+		t.Fatalf("ErrorCodeOf() = %q, want %q; err = %v", got, ErrorCodeInvalidTypeRef, err)
+	}
+}
+
+func TestTypeRefJSON_UsesReadableTypeExpression(t *testing.T) {
+	t.Parallel()
+
+	var got TypeRef
+	if err := json.Unmarshal([]byte(`"map<string, list<Booking?>>"`), &got); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if got.Kind != TypeKindMap {
+		t.Fatalf("Kind = %q, want map", got.Kind)
+	}
+	if got.Key == nil || got.Key.Kind != TypeKindString {
+		t.Fatalf("Key = %#v, want string", got.Key)
+	}
+	if got.Value == nil || got.Value.Kind != TypeKindList {
+		t.Fatalf("Value = %#v, want list", got.Value)
+	}
+	if got.Value.Elem == nil || got.Value.Elem.Name != "Booking" || !got.Value.Elem.Nullable {
+		t.Fatalf("Value.Elem = %#v, want nullable Booking", got.Value.Elem)
+	}
+
+	var buffer bytes.Buffer
+	encoder := json.NewEncoder(&buffer)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(got); err != nil {
+		t.Fatalf("json.Encode() error = %v", err)
+	}
+	if strings.TrimSpace(buffer.String()) != `"map<string, list<Booking?>>"` {
+		t.Fatalf("json.Encode() = %s, want readable expression", buffer.String())
 	}
 }
 

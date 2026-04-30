@@ -1,32 +1,14 @@
 {
   "version": "v1",
-  "endpoints": [
-    {
-      "name": "CreateUser",
-      "method": "POST",
-      "path": "/users",
-      "successStatus": 201,
-      "request": {
-        "body": { "kind": "named", "name": "CreateUserRequest" }
-      },
-      "response": {
-        "envelope": true,
-        "body": { "kind": "named", "name": "User" }
-      },
-      "error": {
-        "body": { "kind": "named", "name": "ProblemDetails" }
-      }
-    }
-  ],
-  "types": [
+  "models": [
     {
       "name": "CreateUserRequest",
       "kind": "object",
       "fields": [
         {
           "name": "Name",
-          "wireName": "name",
-          "type": { "kind": "string" },
+          "key": "name",
+          "type": "string",
           "required": true
         }
       ]
@@ -37,14 +19,14 @@
       "fields": [
         {
           "name": "ID",
-          "wireName": "id",
-          "type": { "kind": "uuid" },
+          "key": "id",
+          "type": "uuid",
           "required": true
         },
         {
           "name": "Name",
-          "wireName": "name",
-          "type": { "kind": "string" },
+          "key": "name",
+          "type": "string",
           "required": true
         }
       ]
@@ -55,28 +37,46 @@
       "fields": [
         {
           "name": "Code",
-          "wireName": "code",
-          "type": { "kind": "string" },
+          "key": "code",
+          "type": "string",
           "required": true
         },
         {
           "name": "Message",
-          "wireName": "message",
-          "type": { "kind": "string" },
+          "key": "message",
+          "type": "string",
           "required": true
         },
         {
           "name": "Metadata",
-          "wireName": "metadata",
-          "type": {
-            "kind": "map",
-            "key": { "kind": "string" },
-            "value": { "kind": "any" }
-          },
+          "key": "metadata",
+          "type": "map<string, any>",
           "required": false,
           "omitEmpty": true
         }
       ]
     }
-  ]
+  ],
+  "routes": {
+    "headers": [],
+    "endpoints": [
+      {
+        "name": "CreateUser",
+        "method": "POST",
+        "path": "/users",
+        "successStatus": 201,
+        "request": {
+          "body": "CreateUserRequest"
+        },
+        "response": {
+          "envelope": true,
+          "body": "User"
+        },
+        "error": {
+          "body": "ProblemDetails"
+        }
+      }
+    ],
+    "groups": []
+  }
 }
