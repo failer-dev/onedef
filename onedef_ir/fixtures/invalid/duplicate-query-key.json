@@ -1,0 +1,32 @@
+{
+  "version": "v1",
+  "routes": {
+    "endpoints": [
+      {
+        "name": "SearchUsers",
+        "method": "GET",
+        "path": "/users",
+        "successStatus": 204,
+        "request": {
+          "queries": [
+            {
+              "name": "Cursor",
+              "key": "cursor",
+              "type": "string"
+            },
+            {
+              "name": "NextCursor",
+              "key": "cursor",
+              "type": "string"
+            }
+          ]
+        },
+        "response": {
+          "envelope": false
+        }
+      }
+    ],
+    "groups": []
+  },
+  "models": []
+}

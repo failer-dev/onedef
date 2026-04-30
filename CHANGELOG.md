@@ -1,9 +1,42 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+## [0.2.0] - 2026-04-29
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+### Added
+
+- Added Go group DSL: `Group`, `Endpoint`, `Endpoints`.
+- Added scoped `Provide`, `BeforeHandle`, `AfterHandle`, and `Observe`.
+- Added typed headers through `Header[T]`, `RequireHeader`, and `OmitHeader`.
+- Added scoped `ErrorPolicy[T]` and endpoint-level overrides.
+- Added `GenerateIRJSON` for programmatic IR output.
+- Added `onedef_ir` as the language-neutral contract.
+- Added canonical IR docs, schema, fixtures, and validator tests.
+- Added Dart `sdk_core` and `sdk_gen` packages.
+- Added Dart `Result<T, E>` return model.
+- Added typed Dart failure variants for HTTP errors, network failures, and contract violations.
+- Added declared success status support, including `201` and `204`.
+- Added structured success and error envelopes with `code`, `title`, `message`, and `data`.
+- Added server timeout defaults with override options.
+- Added chat example covering server, IR generation, and Dart SDK generation.
+
+### Breaking Changes
+
+- Replaced raw non-204 success bodies with `{code, title, message, data}` envelopes.
+- Replaced global error handler flow with scoped `ErrorPolicy[T]`.
+- Moved SDK generation out of the Go runtime.
+- Moved Dart SDK generation to external IR consumers.
+- Moved Dart shared runtime types to `onedef_dart/sdk_core`.
+- Replaced generated Dart method return values with `Result<T, E>`.
+- Required generated Dart clients to accept only the declared success status. Any other status is a failure.
+- Required `204` endpoints to use `Response struct{}` and return no body.
+
+### Removed
+
+- Removed in-process Dart SDK generation from the Go runtime.
+- Removed `GET /onedef/sdk/dart`.
+- Removed the built-in Go Dart generator under `internal/sdk/dart`.
+- Removed the old generated `OnedefApiException` flow.
+- Removed flat single-client Dart SDK generation through `src/client.dart`.
 
 ## [0.1.0] - 2026-03-27
 
@@ -11,28 +44,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Core Framework
 
-- Struct-based API endpoint definition system with sealed HTTP method markers (GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS)
-- Route definition via `path:""` struct tags
-- `Handle(context.Context) error` handler interface
-- Type-safe sealed interface preventing external method marker implementations
+- Added struct-based API endpoint definitions with sealed HTTP method markers.
+- Added `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, and `OPTIONS` markers.
+- Added route definitions through `path:""` struct tags.
+- Added `Handle(context.Context) error` handler interface.
+- Added sealed method marker interfaces to block external marker implementations.
 
 #### Request Parsing
 
-- Automatic path parameter extraction with type conversion (string, int8-64, uint8-64, bool, uuid.UUID)
-- Automatic query parameter parsing for GET/DELETE requests
-- JSON body parsing for POST/PUT/PATCH requests
-- Path parameters override body values
+- Added automatic path parameter extraction.
+- Added type conversion for `string`, signed integers, unsigned integers, `bool`, and `uuid.UUID`.
+- Added automatic query parameter parsing for `GET` and `DELETE`.
+- Added JSON body parsing for `POST`, `PUT`, and `PATCH`.
+- Added path parameter precedence over body values.
 
 #### Dart SDK Generation
 
-- Automatic Dart HTTP client generation from Go struct definitions
-- Go to Dart type mapping (integers, floats, strings, booleans, pointers to nullable, slices to List, maps to Map, structs to classes, uuid to String)
-- Dart model class generation with constructors, `fromJson()`, and `toJson()`
-- ZIP package delivery via `GET /onedef/sdk/dart` endpoint
-- Customizable package naming
+- Added Dart HTTP client generation from Go struct definitions.
+- Added Go-to-Dart type mapping.
+- Added Dart model classes with constructors, `fromJson()`, and `toJson()`.
+- Added ZIP package delivery through `GET /onedef/sdk/dart`.
+- Added customizable package naming.
 
 #### Server
 
-- `http.ServeMux`-based routing
-- `Register()` and `Run()` public API
-- Registered route listing on startup
+- Added `http.ServeMux` routing.
+- Added `Register()` and `Run()` public API.
+- Added registered route listing on startup.

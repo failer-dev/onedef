@@ -1,0 +1,24 @@
+{
+  "version": "v1",
+  "models": [],
+  "routes": {
+    "headers": [],
+    "endpoints": [],
+    "groups": [
+      {
+        "name": "orders",
+        "endpoints": [],
+        "headers": [
+          {
+            "key": "Authorization",
+            "type": "string"
+          },
+          {
+            "key": "authorization",
+            "type": "string"
+          }
+        ]
+      }
+    ]
+  }
+}

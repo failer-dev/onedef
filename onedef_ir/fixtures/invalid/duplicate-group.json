@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "routes": {
+    "endpoints": [],
+    "groups": [
+      {
+        "name": "booking"
+      },
+      {
+        "name": "booking"
+      }
+    ]
+  },
+  "models": []
+}

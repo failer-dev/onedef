@@ -1,0 +1,87 @@
+{
+  "version": "v1",
+  "initialisms": [
+    "ID"
+  ],
+  "models": [
+    {
+      "name": "CreateUserRequest",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "Name",
+          "key": "name",
+          "type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "User",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "ID",
+          "key": "id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "Name",
+          "key": "name",
+          "type": "string",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "routes": {
+    "headers": [],
+    "endpoints": [],
+    "groups": [
+      {
+        "name": "user",
+        "endpoints": [
+          {
+            "name": "CreateUser",
+            "method": "POST",
+            "path": "/api/v1/users",
+            "successStatus": 201,
+            "request": {
+              "body": "CreateUserRequest",
+              "headers": [
+                {
+                  "name": "IdempotencyKey",
+                  "key": "Idempotency-Key",
+                  "type": "int",
+                  "required": true
+                },
+                {
+                  "name": "RequestId",
+                  "key": "X-Request-Id",
+                  "type": "string?",
+                  "required": false
+                }
+              ]
+            },
+            "response": {
+              "envelope": true,
+              "body": "User"
+            }
+          }
+        ],
+        "groups": [],
+        "headers": [
+          {
+            "key": "Authorization",
+            "type": "string",
+            "description": "Bearer access token.",
+            "examples": [
+              "Bearer demo-token"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

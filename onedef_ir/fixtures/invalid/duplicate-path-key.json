@@ -1,0 +1,32 @@
+{
+  "version": "v1",
+  "routes": {
+    "endpoints": [
+      {
+        "name": "GetBooking",
+        "method": "GET",
+        "path": "/bookings/{id}",
+        "successStatus": 204,
+        "request": {
+          "paths": [
+            {
+              "name": "BranchID",
+              "key": "id",
+              "type": "uuid"
+            },
+            {
+              "name": "ID",
+              "key": "id",
+              "type": "uuid"
+            }
+          ]
+        },
+        "response": {
+          "envelope": false
+        }
+      }
+    ],
+    "groups": []
+  },
+  "models": []
+}

@@ -1,0 +1,20 @@
+{
+  "version": "v1",
+  "routes": {
+    "endpoints": [
+      {
+        "name": "Health",
+        "group": "system",
+        "method": "GET",
+        "path": "/health",
+        "successStatus": 204,
+        "request": {},
+        "response": {
+          "envelope": false
+        }
+      }
+    ],
+    "groups": []
+  },
+  "models": []
+}

@@ -1,0 +1,29 @@
+{
+  "version": "v1",
+  "models": [],
+  "routes": {
+    "headers": [],
+    "endpoints": [
+      {
+        "name": "GetUser",
+        "method": "GET",
+        "path": "/users/{id}",
+        "successStatus": 200,
+        "request": {
+          "paths": [
+            {
+              "name": "ID",
+              "key": "id",
+              "type": "uuid"
+            }
+          ]
+        },
+        "response": {
+          "envelope": true,
+          "body": "MissingUser"
+        }
+      }
+    ],
+    "groups": []
+  }
+}
