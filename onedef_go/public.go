@@ -278,6 +278,10 @@ func WithMaxHeaderBytes(n int) RunOption {
 	return app.WithMaxHeaderBytes(n)
 }
 
+func WithMaxBodyBytes(n int64) RunOption {
+	return app.WithMaxBodyBytes(n)
+}
+
 func New(spec *Spec, specs ...*Spec) *App {
 	all := append([]*Spec{spec}, specs...)
 	return app.New(specRootNodes(all)...)

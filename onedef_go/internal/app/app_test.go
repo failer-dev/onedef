@@ -1127,9 +1127,43 @@ func TestAppHandler_InvalidBody(t *testing.T) {
 
 	assertErrorResponse(t, res, http.StatusBadRequest, "invalid_body", "Bad Request", "request body is invalid JSON")
 
-	data := resErrorData(t, res)
-	if _, ok := data["error"].(string); !ok {
-		t.Fatalf("data.error = %#v, want string", data["error"])
+	if data := resErrorData(t, res); data != nil {
+		t.Fatalf("data = %#v, want nil", data)
+	}
+}
+
+func TestAppHandler_InvalidBodyWithTrailingJSON(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t, &createUserEndpoint{})
+
+	req := httptest.NewRequest(http.MethodPost, "/users", strings.NewReader(`{"name":"Alice"}{"name":"Bob"}`))
+	res := httptest.NewRecorder()
+
+	app.mux.ServeHTTP(res, req)
+
+	assertErrorResponse(t, res, http.StatusBadRequest, "invalid_body", "Bad Request", "request body is invalid JSON")
+
+	if data := resErrorData(t, res); data != nil {
+		t.Fatalf("data = %#v, want nil", data)
+	}
+}
+
+func TestAppHandler_RequestBodyTooLarge(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t, &createUserEndpoint{})
+	server := app.newHTTPServer(":0", WithMaxBodyBytes(8))
+
+	req := httptest.NewRequest(http.MethodPost, "/users", strings.NewReader(`{"name":"Alice"}`))
+	res := httptest.NewRecorder()
+
+	server.Handler.ServeHTTP(res, req)
+
+	assertErrorResponse(t, res, http.StatusRequestEntityTooLarge, "request_body_too_large", "Request Entity Too Large", "request body is too large")
+
+	if data := resErrorData(t, res); data != nil {
+		t.Fatalf("data = %#v, want nil", data)
 	}
 }
 

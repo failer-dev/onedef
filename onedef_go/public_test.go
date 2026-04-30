@@ -72,6 +72,7 @@ func TestPublicAPISurface(t *testing.T) {
 		t.Fatal("New(spec) = nil")
 	}
 	_ = api.GenerateIRJSON
+	_ = onedef.WithMaxBodyBytes(1024)
 }
 
 func TestEndpointOptionsCompileExternally(t *testing.T) {

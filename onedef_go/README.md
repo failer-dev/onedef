@@ -109,6 +109,7 @@ Generated Dart SDKs depend on the shared `onedef_dart_sdk_core` Dart package in 
 - `WriteTimeout: 30s`
 - `IdleTimeout: 60s`
 - `MaxHeaderBytes: 1 << 20`
+- `MaxBodyBytes: 10 MiB`
 
 You can still override them per server:
 
@@ -117,6 +118,7 @@ if err := app.Run(
     ":8080",
     onedef.WithReadTimeout(20*time.Second),
     onedef.WithIdleTimeout(90*time.Second),
+    onedef.WithMaxBodyBytes(20<<20),
 ); err != nil {
     panic(err)
 }

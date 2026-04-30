@@ -28,6 +28,9 @@ func TestNewHTTPServer_UsesSecureDefaults(t *testing.T) {
 	if server.MaxHeaderBytes != 1<<20 {
 		t.Fatalf("MaxHeaderBytes = %d, want %d", server.MaxHeaderBytes, 1<<20)
 	}
+	if got := maxBodyBytesFromHandler(t, server.Handler); got != defaultMaxBodyBytes {
+		t.Fatalf("maxBodyBytes = %d, want %d", got, defaultMaxBodyBytes)
+	}
 }
 
 func TestNewHTTPServer_OverridesSecureDefaults(t *testing.T) {
@@ -41,6 +44,7 @@ func TestNewHTTPServer_OverridesSecureDefaults(t *testing.T) {
 		WithWriteTimeout(11*time.Second),
 		WithIdleTimeout(13*time.Second),
 		WithMaxHeaderBytes(2048),
+		WithMaxBodyBytes(4096),
 	)
 
 	if server.ReadHeaderTimeout != 2*time.Second {
@@ -58,6 +62,9 @@ func TestNewHTTPServer_OverridesSecureDefaults(t *testing.T) {
 	if server.MaxHeaderBytes != 2048 {
 		t.Fatalf("MaxHeaderBytes = %d, want %d", server.MaxHeaderBytes, 2048)
 	}
+	if got := maxBodyBytesFromHandler(t, server.Handler); got != 4096 {
+		t.Fatalf("maxBodyBytes = %d, want 4096", got)
+	}
 }
 
 func TestNewHTTPServer_ZeroValuesDisableLimits(t *testing.T) {
@@ -71,6 +78,7 @@ func TestNewHTTPServer_ZeroValuesDisableLimits(t *testing.T) {
 		WithWriteTimeout(0),
 		WithIdleTimeout(0),
 		WithMaxHeaderBytes(0),
+		WithMaxBodyBytes(0),
 	)
 
 	if server.ReadHeaderTimeout != 0 {
@@ -87,6 +95,9 @@ func TestNewHTTPServer_ZeroValuesDisableLimits(t *testing.T) {
 	}
 	if server.MaxHeaderBytes != 0 {
 		t.Fatalf("MaxHeaderBytes = %d, want 0", server.MaxHeaderBytes)
+	}
+	if server.Handler != app.mux {
+		t.Fatalf("Handler = %#v, want mux without body limit wrapper", server.Handler)
 	}
 }
 
@@ -123,6 +134,11 @@ func TestRunOptions_PanicOnNegativeValues(t *testing.T) {
 			run:  func() { WithMaxHeaderBytes(-1) },
 			want: "max header bytes cannot be negative",
 		},
+		{
+			name: "max body bytes",
+			run:  func() { WithMaxBodyBytes(-1) },
+			want: "max body bytes cannot be negative",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -142,4 +158,14 @@ func TestRunOptions_PanicOnNegativeValues(t *testing.T) {
 			tc.run()
 		})
 	}
+}
+
+func maxBodyBytesFromHandler(t *testing.T, handler any) int64 {
+	t.Helper()
+
+	wrapped, ok := handler.(*maxBodyBytesHandler)
+	if !ok {
+		t.Fatalf("Handler = %#v, want *maxBodyBytesHandler", handler)
+	}
+	return wrapped.maxBodyBytes
 }

@@ -2,6 +2,8 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"reflect"
 
@@ -37,10 +39,20 @@ func MakeHandlerFunc(es meta.EndpointStruct, provides provideRegistry) meta.Hand
 
 		if r.Body != nil && es.Method != meta.EndpointMethodGet && es.Method != meta.EndpointMethodDelete {
 			if err := decodeJSON(r, requestInstance.Addr().Interface()); err != nil {
+				var maxBytesErr *http.MaxBytesError
+				if errors.As(err, &maxBytesErr) {
+					return meta.NewHTTPError(
+						http.StatusRequestEntityTooLarge,
+						"request_body_too_large",
+						http.StatusText(http.StatusRequestEntityTooLarge),
+						"request body is too large",
+						nil,
+					)
+				}
 				return meta.BadRequest(
 					"invalid_body",
 					"request body is invalid JSON",
-					map[string]any{"error": err.Error()},
+					nil,
 				)
 			}
 		}
@@ -174,7 +186,15 @@ func populateRequestFields(
 }
 
 func decodeJSON(r *http.Request, target any) error {
-	if err := json.NewDecoder(r.Body).Decode(target); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return errors.New("request body must contain a single JSON value")
+		}
 		return err
 	}
 	return nil
