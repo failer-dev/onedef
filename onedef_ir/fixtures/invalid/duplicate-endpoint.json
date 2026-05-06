@@ -1,0 +1,30 @@
+{
+  "version": "v1",
+  "routes": {
+    "endpoints": [
+      {
+        "name": "Health",
+        "method": "GET",
+        "path": "/health",
+        "successStatus": 204,
+        "request": {},
+        "response": {
+          "envelope": false
+        }
+      },
+      {
+        "name": "HealthV2",
+        "sdkName": "Health",
+        "method": "GET",
+        "path": "/health-v2",
+        "successStatus": 204,
+        "request": {},
+        "response": {
+          "envelope": false
+        }
+      }
+    ],
+    "groups": []
+  },
+  "models": []
+}

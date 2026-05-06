@@ -1,0 +1,82 @@
+{
+  "version": "v1",
+  "models": [
+    {
+      "name": "CreateUserRequest",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "Name",
+          "key": "name",
+          "type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "User",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "ID",
+          "key": "id",
+          "type": "uuid",
+          "required": true
+        },
+        {
+          "name": "Name",
+          "key": "name",
+          "type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "ProblemDetails",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "Code",
+          "key": "code",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "Message",
+          "key": "message",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "Metadata",
+          "key": "metadata",
+          "type": "map<string, any>",
+          "required": false,
+          "omitEmpty": true
+        }
+      ]
+    }
+  ],
+  "routes": {
+    "headers": [],
+    "endpoints": [
+      {
+        "name": "CreateUser",
+        "method": "POST",
+        "path": "/users",
+        "successStatus": 201,
+        "request": {
+          "body": "CreateUserRequest"
+        },
+        "response": {
+          "envelope": true,
+          "body": "User"
+        },
+        "error": {
+          "body": "ProblemDetails"
+        }
+      }
+    ],
+    "groups": []
+  }
+}

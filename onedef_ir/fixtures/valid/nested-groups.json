@@ -1,0 +1,94 @@
+{
+  "version": "v1",
+  "models": [
+    {
+      "name": "AuditEventPage",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "Items",
+          "key": "items",
+          "type": "list<AuditEvent>",
+          "required": true
+        },
+        {
+          "name": "NextCursor",
+          "key": "nextCursor",
+          "type": "string?",
+          "required": false,
+          "omitEmpty": true
+        }
+      ]
+    },
+    {
+      "name": "AuditEvent",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "ID",
+          "key": "id",
+          "type": "uuid",
+          "required": true
+        },
+        {
+          "name": "Action",
+          "key": "action",
+          "type": "string",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "routes": {
+    "headers": [],
+    "endpoints": [],
+    "groups": [
+      {
+        "name": "admin",
+        "groups": [
+          {
+            "name": "report",
+            "groups": [
+              {
+                "name": "audit",
+                "endpoints": [
+                  {
+                    "name": "ListAuditEvents",
+                    "method": "GET",
+                    "path": "/admin/reports/audit",
+                    "successStatus": 200,
+                    "request": {
+                      "queries": [
+                        {
+                          "name": "Cursor",
+                          "key": "cursor",
+                          "type": "string?"
+                        }
+                      ]
+                    },
+                    "response": {
+                      "envelope": true,
+                      "body": "AuditEventPage"
+                    }
+                  }
+                ],
+                "headers": [
+                  {
+                    "key": "X-Audit-Scope",
+                    "type": "string"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "headers": [
+          {
+            "key": "Authorization",
+            "type": "string"
+          }
+        ]
+      }
+    ]
+  }
+}

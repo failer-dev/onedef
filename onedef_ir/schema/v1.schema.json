@@ -1,0 +1,306 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://onedef.dev/ir/schema/v1.schema.json",
+  "title": "onedef IR v1",
+  "type": "object",
+  "required": ["version", "routes", "models"],
+  "properties": {
+    "version": {
+      "const": "v1"
+    },
+    "initialisms": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "routes": {
+      "$ref": "#/$defs/routes"
+    },
+    "models": {
+      "$ref": "#/$defs/modelDefArray"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "routes": {
+      "type": "object",
+      "properties": {
+        "headers": {
+          "$ref": "#/$defs/headerArray"
+        },
+        "endpoints": {
+          "$ref": "#/$defs/endpointArray"
+        },
+        "groups": {
+          "$ref": "#/$defs/groupArray"
+        }
+      },
+      "additionalProperties": false
+    },
+    "groupArray": {
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/$defs/group"
+      }
+    },
+    "group": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "headers": {
+          "$ref": "#/$defs/headerArray"
+        },
+        "endpoints": {
+          "$ref": "#/$defs/endpointArray"
+        },
+        "groups": {
+          "$ref": "#/$defs/groupArray"
+        }
+      },
+      "additionalProperties": false
+    },
+    "endpointArray": {
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/$defs/endpoint"
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "required": [
+        "name",
+        "method",
+        "path",
+        "successStatus",
+        "request",
+        "response"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sdkName": {
+          "type": "string"
+        },
+        "method": {
+          "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "successStatus": {
+          "type": "integer",
+          "minimum": 200,
+          "maximum": 299
+        },
+        "request": {
+          "$ref": "#/$defs/request"
+        },
+        "response": {
+          "$ref": "#/$defs/response"
+        },
+        "error": {
+          "$ref": "#/$defs/error"
+        }
+      },
+      "additionalProperties": false
+    },
+    "request": {
+      "type": "object",
+      "properties": {
+        "paths": {
+          "$ref": "#/$defs/parameterArray"
+        },
+        "queries": {
+          "$ref": "#/$defs/parameterArray"
+        },
+        "headers": {
+          "$ref": "#/$defs/headerParameterArray"
+        },
+        "body": {
+          "$ref": "#/$defs/typeRef"
+        }
+      },
+      "additionalProperties": false
+    },
+    "parameterArray": {
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/$defs/parameter"
+      }
+    },
+    "parameter": {
+      "type": "object",
+      "required": ["name", "key", "type"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/typeRef"
+        },
+        "description": {
+          "type": "string"
+        },
+        "examples": {
+          "$ref": "#/$defs/stringArray"
+        }
+      },
+      "additionalProperties": false
+    },
+    "headerParameterArray": {
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/$defs/headerParameter"
+      }
+    },
+    "headerParameter": {
+      "type": "object",
+      "required": ["name", "key", "type", "required"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/typeRef"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        },
+        "examples": {
+          "$ref": "#/$defs/stringArray"
+        }
+      },
+      "additionalProperties": false
+    },
+    "headerArray": {
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/$defs/header"
+      }
+    },
+    "header": {
+      "type": "object",
+      "required": ["key", "type"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/typeRef"
+        },
+        "description": {
+          "type": "string"
+        },
+        "examples": {
+          "$ref": "#/$defs/stringArray"
+        }
+      },
+      "additionalProperties": false
+    },
+    "response": {
+      "type": "object",
+      "required": ["envelope"],
+      "properties": {
+        "envelope": {
+          "type": "boolean"
+        },
+        "body": {
+          "$ref": "#/$defs/typeRef"
+        }
+      },
+      "additionalProperties": false
+    },
+    "error": {
+      "type": "object",
+      "required": ["body"],
+      "properties": {
+        "body": {
+          "$ref": "#/$defs/typeRef"
+        }
+      },
+      "additionalProperties": false
+    },
+    "modelDefArray": {
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/$defs/modelDef"
+      }
+    },
+    "modelDef": {
+      "type": "object",
+      "required": ["name", "kind"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "object"
+        },
+        "fields": {
+          "$ref": "#/$defs/fieldDefArray"
+        }
+      },
+      "additionalProperties": false
+    },
+    "fieldDefArray": {
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/$defs/fieldDef"
+      }
+    },
+    "fieldDef": {
+      "type": "object",
+      "required": ["name", "key", "type", "required"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/typeRef"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "omitEmpty": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "typeRef": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stringArray": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

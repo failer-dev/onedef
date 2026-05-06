@@ -1,0 +1,103 @@
+{
+  "version": "v1",
+  "models": [
+    {
+      "name": "CreateUserRequest",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "Name",
+          "key": "name",
+          "type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "User",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "ID",
+          "key": "id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "Name",
+          "key": "name",
+          "type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "HealthStatus",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "Status",
+          "key": "status",
+          "type": "string",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "routes": {
+    "headers": [],
+    "endpoints": [
+      {
+        "name": "Health",
+        "method": "GET",
+        "path": "/health",
+        "successStatus": 200,
+        "request": {},
+        "response": {
+          "envelope": true,
+          "body": "HealthStatus"
+        }
+      }
+    ],
+    "groups": [
+      {
+        "name": "user",
+        "headers": [],
+        "endpoints": [
+          {
+            "name": "CreateUser",
+            "method": "POST",
+            "path": "/users",
+            "successStatus": 201,
+            "request": {
+              "body": "CreateUserRequest"
+            },
+            "response": {
+              "envelope": true,
+              "body": "User"
+            }
+          },
+          {
+            "name": "DeleteUser",
+            "method": "DELETE",
+            "path": "/users/{id}",
+            "successStatus": 204,
+            "request": {
+              "paths": [
+                {
+                  "name": "ID",
+                  "key": "id",
+                  "type": "string"
+                }
+              ]
+            },
+            "response": {
+              "envelope": false
+            }
+          }
+        ],
+        "groups": []
+      }
+    ]
+  }
+}

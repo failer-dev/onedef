@@ -1,0 +1,147 @@
+{
+  "version": "v1",
+  "initialisms": [
+    "ID"
+  ],
+  "models": [
+    {
+      "name": "CreateBookingRequest",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "Name",
+          "key": "name",
+          "type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Booking",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "ID",
+          "key": "id",
+          "type": "string",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "routes": {
+    "headers": [],
+    "endpoints": [],
+    "groups": [
+      {
+        "name": "branch",
+        "endpoints": [],
+        "groups": [
+          {
+            "name": "booking",
+            "endpoints": [
+              {
+                "name": "GetBranchBooking",
+                "method": "GET",
+                "path": "/api/v1/branch/booking/{id}",
+                "successStatus": 200,
+                "request": {
+                  "paths": [
+                    {
+                      "name": "ID",
+                      "key": "id",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "response": {
+                  "envelope": true,
+                  "body": "Booking"
+                }
+              },
+              {
+                "name": "CreateBranchBooking",
+                "method": "POST",
+                "path": "/api/v1/branch/booking",
+                "successStatus": 201,
+                "request": {
+                  "body": "CreateBookingRequest",
+                  "headers": [
+                    {
+                      "name": "IdempotencyKey",
+                      "key": "Idempotency-Key",
+                      "type": "string",
+                      "required": true
+                    }
+                  ]
+                },
+                "response": {
+                  "envelope": true,
+                  "body": "Booking"
+                }
+              }
+            ],
+            "groups": [],
+            "headers": [
+              {
+                "key": "X-Booking-Scope",
+                "type": "string"
+              }
+            ]
+          }
+        ],
+        "headers": [
+          {
+            "key": "Authorization",
+            "type": "string"
+          },
+          {
+            "key": "X-Branch-Id",
+            "type": "int"
+          }
+        ]
+      },
+      {
+        "name": "customer",
+        "endpoints": [],
+        "groups": [
+          {
+            "name": "booking",
+            "endpoints": [
+              {
+                "name": "FindByID",
+                "method": "GET",
+                "path": "/api/v1/customer/booking/{id}",
+                "successStatus": 200,
+                "request": {
+                  "paths": [
+                    {
+                      "name": "ID",
+                      "key": "id",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "response": {
+                  "envelope": true,
+                  "body": "Booking"
+                }
+              }
+            ],
+            "groups": []
+          }
+        ],
+        "headers": [
+          {
+            "key": "Authorization",
+            "type": "string"
+          },
+          {
+            "key": "X-Customer-Id",
+            "type": "uuid"
+          }
+        ]
+      }
+    ]
+  }
+}

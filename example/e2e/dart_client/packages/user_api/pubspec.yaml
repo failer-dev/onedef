@@ -1,5 +1,0 @@
-name: user_api
-environment:
-  sdk: ^3.0.0
-dependencies:
-  http: ^1.2.0

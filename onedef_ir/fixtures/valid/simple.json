@@ -1,0 +1,54 @@
+{
+  "version": "v1",
+  "initialisms": [
+    "ID"
+  ],
+  "models": [
+    {
+      "name": "User",
+      "kind": "object",
+      "fields": [
+        {
+          "name": "ID",
+          "key": "id",
+          "type": "uuid",
+          "required": true
+        },
+        {
+          "name": "Name",
+          "key": "name",
+          "type": "string",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "routes": {
+    "headers": [],
+    "endpoints": [
+      {
+        "name": "GetUser",
+        "method": "GET",
+        "path": "/users/{id}",
+        "successStatus": 200,
+        "request": {
+          "paths": [
+            {
+              "name": "ID",
+              "key": "id",
+              "type": "uuid"
+            }
+          ]
+        },
+        "response": {
+          "envelope": true,
+          "body": "User"
+        },
+        "error": {
+          "body": "DefaultError"
+        }
+      }
+    ],
+    "groups": []
+  }
+}
