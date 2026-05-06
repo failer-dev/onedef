@@ -282,7 +282,7 @@ String _renderApiClient(_PackagePlan plan) {
     final propertyName = _groupPropertyName(groupPlan.group);
     buffer
       ..writeln(
-        '      $propertyName: ${_groupClientClassName(groupPlan)}._bind(',
+        '      $propertyName: ${_groupClientClassName(groupPlan)}.bind(',
       )
       ..writeln('        transport,')
       ..writeln('        $propertyName,');
@@ -453,7 +453,7 @@ String _renderGroupFile(_GroupPlan plan) {
 
   buffer
     ..writeln()
-    ..writeln('  static $className _bind(')
+    ..writeln('  static $className bind(')
     ..writeln('    Transport transport,')
     ..writeln('    $configClassName config,');
   if (ancestorHeaders.isEmpty) {
@@ -482,7 +482,7 @@ String _renderGroupFile(_GroupPlan plan) {
   }
   for (final child in group.groups) {
     buffer.writeln(
-      '      ${_groupPropertyName(child)}: ${_groupClientClassNameForSegments(_childPathSegments(plan, child))}._bind(',
+      '      ${_groupPropertyName(child)}: ${_groupClientClassNameForSegments(_childPathSegments(plan, child))}.bind(',
     );
     buffer
       ..writeln('        transport,')

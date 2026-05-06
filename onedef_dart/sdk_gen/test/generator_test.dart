@@ -185,6 +185,47 @@ void main() {
     expect(group, contains('requestResult<User, DefaultError>'));
   });
 
+  test('writePackage emits grouped SDK that passes dart analyze', () async {
+    final fixture = File(
+      path.join('test', 'fixtures', 'grouped_spec.json'),
+    ).readAsStringSync();
+    final spec = Spec.fromJson(jsonDecode(fixture) as Map<String, dynamic>);
+
+    final tempDir = Directory.systemTemp.createTempSync(
+      'onedef-dart-generator-analyze-',
+    );
+    addTearDown(() => tempDir.deleteSync(recursive: true));
+
+    final outDir = path.join(tempDir.path, 'generated_client');
+    final corePath = path.normalize(
+      path.join(Directory.current.path, '..', 'sdk_core'),
+    );
+    await writePackage(
+      spec: spec,
+      packageName: 'generated_client',
+      outputDir: outDir,
+      corePath: corePath,
+    );
+
+    final pubGet = await _runDart([
+      'pub',
+      'get',
+      '--offline',
+    ], workingDirectory: outDir);
+    expect(
+      pubGet.exitCode,
+      equals(0),
+      reason: 'dart pub get failed\n${pubGet.stdout}\n${pubGet.stderr}',
+    );
+
+    final analyze = await _runDart(['analyze'], workingDirectory: outDir);
+    expect(
+      analyze.exitCode,
+      equals(0),
+      reason: 'dart analyze failed\n${analyze.stdout}\n${analyze.stderr}',
+    );
+  });
+
   test('renderPackage uses sdkName override for method names', () async {
     final spec = Spec(
       version: 'v1',
@@ -404,7 +445,8 @@ void main() {
     expect(client, contains('class ApiClient'));
     expect(client, contains('required UserGroup user,'));
     expect(client, contains('final UserGroupClient user;'));
-    expect(client, contains('user: UserGroupClient._bind('));
+    expect(client, contains('user: UserGroupClient.bind('));
+    expect(client, isNot(contains('._bind(')));
     expect(client, contains("import 'groups/user/client.dart';"));
 
     final providers = files['lib/src/providers.dart']!;
@@ -417,6 +459,8 @@ void main() {
     expect(group, contains("import 'models.dart';"));
     expect(group, contains('class UserGroup'));
     expect(group, contains('class UserGroupClient'));
+    expect(group, contains('static UserGroupClient bind('));
+    expect(group, isNot(contains('static UserGroupClient _bind(')));
     expect(
       group,
       contains('required HeaderValueProvider<String> authorization,'),
@@ -518,16 +562,19 @@ void main() {
       client,
       isNot(contains('required HeaderValueProvider<String> authorization,')),
     );
-    expect(client, contains('customer: CustomerGroupClient._bind('));
-    expect(client, contains('merchant: MerchantGroupClient._bind('));
+    expect(client, contains('customer: CustomerGroupClient.bind('));
+    expect(client, contains('merchant: MerchantGroupClient.bind('));
+    expect(client, isNot(contains('._bind(')));
 
     final customer = files['lib/src/groups/customer/client.dart']!;
+    expect(customer, contains('static CustomerGroupClient bind('));
     expect(
       customer,
       contains('required HeaderValueProvider<String> authorization,'),
     );
 
     final merchant = files['lib/src/groups/merchant/client.dart']!;
+    expect(merchant, contains('static MerchantGroupClient bind('));
     expect(
       merchant,
       contains('required HeaderValueProvider<String> authorization,'),
@@ -659,14 +706,18 @@ void main() {
       );
       expect(client, isNot(contains('branchBranchId')));
       expect(client, isNot(contains('branchBookingScope')));
-      expect(client, contains('branch: BranchGroupClient._bind('));
-      expect(client, contains('customer: CustomerGroupClient._bind('));
+      expect(client, contains('branch: BranchGroupClient.bind('));
+      expect(client, contains('customer: CustomerGroupClient.bind('));
+      expect(client, isNot(contains('._bind(')));
 
       final branch = files['lib/src/groups/branch/client.dart']!;
       expect(branch, isNot(contains('ScopeStrategy')));
       expect(branch, contains("import '../branch_booking/client.dart';"));
       expect(branch, contains('class BranchGroup'));
       expect(branch, contains('class BranchGroupClient'));
+      expect(branch, contains('static BranchGroupClient bind('));
+      expect(branch, contains('booking: BranchBookingGroupClient.bind('));
+      expect(branch, isNot(contains('._bind(')));
       expect(branch, contains('required this.xBranchId,'));
       expect(branch, contains('required this.booking,'));
       expect(branch, contains('final BranchBookingGroupClient booking;'));
@@ -676,6 +727,7 @@ void main() {
       expect(branchBooking, isNot(contains('ScopeStrategy')));
       expect(branchBooking, contains('class BranchBookingGroup'));
       expect(branchBooking, contains('class BranchBookingGroupClient'));
+      expect(branchBooking, contains('static BranchBookingGroupClient bind('));
       expect(
         branchBooking,
         contains('final HeaderValueProvider<String> _authorization;'),
@@ -719,6 +771,10 @@ void main() {
           files['lib/src/groups/customer_booking/client.dart']!;
       expect(
         customerBooking,
+        contains('static CustomerBookingGroupClient bind('),
+      );
+      expect(
+        customerBooking,
         contains('final HeaderValueProvider<String> _authorization;'),
       );
       expect(
@@ -760,5 +816,16 @@ void main() {
         isNot(contains('class CreateBookingRequest')),
       );
     },
+  );
+}
+
+Future<ProcessResult> _runDart(
+  List<String> args, {
+  required String workingDirectory,
+}) {
+  return Process.run(
+    Platform.resolvedExecutable,
+    args,
+    workingDirectory: workingDirectory,
   );
 }
